@@ -60,7 +60,7 @@ Khi không có `RENDER_EXTERNAL_URL`, bot dùng long polling. Trên Render, ứn
    - `BOT_TOKEN`: token Telegram Bot mới.
    - `ADMIN_ID`: Telegram user ID dạng số.
    - `DATABASE_URL`: PostgreSQL connection string.
-5. Khai báo các biến tùy chọn theo chức năng: `WEBAPP_URL`, `ALLOWED_ORIGINS`, `TELEGRAM_WEBHOOK_SECRET`, `BANK_WEBHOOK_SECRET`, các biến VietQR và URL nhóm/kênh.
+5. Nhập `TELEGRAM_WEBHOOK_SECRET` khi Render yêu cầu (tạo bằng `openssl rand -hex 32`). Các biến `VIETQR_BANK_ID`, `VIETQR_ACCOUNT_NO`, `VIETQR_ACCOUNT_NAME`, `GROUP_URL` và `CHANNEL_URL` có thể bổ sung sau trong Environment của dịch vụ.
 6. Sau deploy, kiểm tra `https://<ten-dich-vu>.onrender.com/healthz` và mở trang chủ để xem dashboard.
 
 Render tự cung cấp `RENDER_EXTERNAL_URL` và Blueprint tự ánh xạ URL này sang `WEBAPP_URL`. Hãy tạo `TELEGRAM_WEBHOOK_SECRET` bằng `openssl rand -hex 32` rồi nhập vào Render khi tạo Blueprint; `BANK_WEBHOOK_SECRET` được Render tự tạo. Gửi cùng giá trị `BANK_WEBHOOK_SECRET` vào cấu hình header `x-bank-webhook-secret` của nhà cung cấp webhook ngân hàng.
@@ -89,7 +89,7 @@ Tạo secret ngẫu nhiên bằng lệnh `openssl rand -hex 32`. Không gửi se
 
 - `GET /healthz`: health check dành cho Render.
 - `GET /api/health`: trạng thái ứng dụng và kết nối database, không trả về thông tin bí mật.
-- `POST /webhook/telegram`: Telegram webhook; được kiểm tra secret token khi đã cấu hình.
+- `POST /webhook/telegram`: Telegram webhook; bắt buộc kiểm tra secret token trên Render.
 - `POST /webhook/bank`: webhook nạp tiền; bắt buộc có header `x-bank-webhook-secret`.
 - `GET /ws`: WebSocket trạng thái dashboard.
 - `/`: dashboard vận hành tiếng Việt.
@@ -98,7 +98,7 @@ Webhook ngân hàng hiện chỉ chấp nhận nội dung chuyển khoản chín
 
 ## Database
 
-Ứng dụng tự tạo các bảng `users`, `transactions` và `deposit_events` khi khởi động. `deposit_events.reference_code` có khóa chính để bảo đảm một mã giao dịch không được xử lý hai lần.
+Ứng dụng tự tạo các bảng `users`, `transactions` và `deposit_events` khi khởi động. Khi nâng cấp từ schema cũ, ứng dụng chuyển các cột tiền `REAL` sang `NUMERIC(18,0)` để giữ độ chính xác của VND nguyên. `deposit_events.reference_code` có khóa chính để bảo đảm một mã giao dịch không được xử lý hai lần.
 
 ## Kiểm tra mã nguồn
 

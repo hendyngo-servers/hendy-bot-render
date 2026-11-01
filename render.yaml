@@ -10,6 +10,7 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
+    maxShutdownDelaySeconds: 60
     autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV

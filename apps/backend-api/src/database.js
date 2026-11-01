@@ -49,6 +49,59 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_transactions_user_created
       ON transactions (user_id, created_at DESC);
   `);
+
+  // Upgrade REAL currency columns from the previous schema to exact integer VND.
+  await pool.query(`
+    DO $
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'users'
+          AND column_name = 'balance'
+          AND data_type IN ('real', 'double precision')
+      ) THEN
+        ALTER TABLE users
+          ALTER COLUMN balance TYPE NUMERIC(18, 0)
+          USING COALESCE(ROUND(balance::numeric), 0);
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'users'
+          AND column_name = 'total_deposited'
+          AND data_type IN ('real', 'double precision')
+      ) THEN
+        ALTER TABLE users
+          ALTER COLUMN total_deposited TYPE NUMERIC(18, 0)
+          USING COALESCE(ROUND(total_deposited::numeric), 0);
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'transactions'
+          AND column_name = 'amount'
+          AND data_type IN ('real', 'double precision')
+      ) THEN
+        ALTER TABLE transactions
+          ALTER COLUMN amount TYPE NUMERIC(18, 0)
+          USING COALESCE(ROUND(amount::numeric), 0);
+      END IF;
+    END $;
+
+    UPDATE users
+    SET balance = COALESCE(balance, 0),
+        total_deposited = COALESCE(total_deposited, 0)
+    WHERE balance IS NULL OR total_deposited IS NULL;
+
+    ALTER TABLE users ALTER COLUMN balance SET DEFAULT 0;
+    ALTER TABLE users ALTER COLUMN balance SET NOT NULL;
+    ALTER TABLE users ALTER COLUMN total_deposited SET DEFAULT 0;
+    ALTER TABLE users ALTER COLUMN total_deposited SET NOT NULL;
+  `);
+
   console.log('Đã khởi tạo PostgreSQL schema.');
 }
 
