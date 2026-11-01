@@ -1,20 +1,9 @@
 services:
-  # 1. Web Service chạy FastAPI và Bot Client
   - type: web
-    name: hendy-bot-client
+    name: hendy-bot-monorepo
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn bot_client:app --host 0.0.0.0 --port $PORT
+    buildCommand: "npm install && npm run build && npm run postbuild"
+    startCommand: "cd apps/backend-api/src && uvicorn main:app --host 0.0.0.0 --port $PORT"
     envVars:
-      - key: DATABASE_URL
-        sync: false
-
-  # 2. Background Worker chạy Bot Admin
-  - type: worker
-    name: hendy-bot-admin
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python bot_admin.py
-    envVars:
-      - key: DATABASE_URL
-        sync: false
+      - key: PYTHON_VERSION
+        value: 3.10.13
