@@ -1,13 +1,16 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
 services:
   - type: web
     name: hendy-bot-render
     runtime: node
     plan: starter
+    region: singapore
     branch: main
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
-    autoDeploy: true
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV
         value: production
