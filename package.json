@@ -1,14 +1,8 @@
 {
-  "name": "hendy-bot-monorepo",
+  "name": "hendy-bot-render",
   "version": "1.0.0",
-  "private": true,
-  "workspaces": [
-    "apps/*"
-  ],
   "scripts": {
-    "install-all": "npm install",
-    "build:frontend": "npm run build --workspace=apps/admin-dashboard",
-    "build": "npm run build:frontend",
-    "start": "node apps/backend-api/src/index.js"
+    "build": "cd apps/admin-dashboard && npm install && npm run build",
+    "postbuild": "cd apps/backend-api && pip install -r requirements.txt"
   }
 }
