@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: hendy-bot-monorepo
-    env: python
+    name: hendy-bot-node
+    env: node
     buildCommand: "npm install && npm run build && npm run postbuild"
-    startCommand: "cd apps/backend-api/src && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "cd apps/backend-api && npm start"
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.10.13
+      - key: NODE_VERSION
+        value: 20
