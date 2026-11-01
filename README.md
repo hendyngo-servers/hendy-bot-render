@@ -63,7 +63,7 @@ Khi không có `RENDER_EXTERNAL_URL`, bot dùng long polling. Trên Render, ứn
 5. Khai báo các biến tùy chọn theo chức năng: `WEBAPP_URL`, `ALLOWED_ORIGINS`, `TELEGRAM_WEBHOOK_SECRET`, `BANK_WEBHOOK_SECRET`, các biến VietQR và URL nhóm/kênh.
 6. Sau deploy, kiểm tra `https://<ten-dich-vu>.onrender.com/healthz` và mở trang chủ để xem dashboard.
 
-Render tự cung cấp `RENDER_EXTERNAL_URL`. Blueprint tự ánh xạ URL này sang `WEBAPP_URL` và tự tạo `TELEGRAM_WEBHOOK_SECRET` cùng `BANK_WEBHOOK_SECRET`. Không cần tự điền hai biến này ở lần tạo dịch vụ đầu tiên.
+Render tự cung cấp `RENDER_EXTERNAL_URL` và Blueprint tự ánh xạ URL này sang `WEBAPP_URL`. Hãy tạo `TELEGRAM_WEBHOOK_SECRET` bằng `openssl rand -hex 32` rồi nhập vào Render khi tạo Blueprint; `BANK_WEBHOOK_SECRET` được Render tự tạo. Gửi cùng giá trị `BANK_WEBHOOK_SECRET` vào cấu hình header `x-bank-webhook-secret` của nhà cung cấp webhook ngân hàng.
 
 ## Biến môi trường
 

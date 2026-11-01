@@ -27,6 +27,6 @@ services:
           name: hendy-bot-render
           envVarKey: RENDER_EXTERNAL_URL
       - key: TELEGRAM_WEBHOOK_SECRET
-        generateValue: true
+        sync: false
       - key: BANK_WEBHOOK_SECRET
         generateValue: true
