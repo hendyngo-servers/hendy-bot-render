@@ -1,0 +1,65 @@
+# =========================================
+# 1. BIẾN MÔI TRƯỜNG & BẢO MẬT (QUAN TRỌNG)
+# =========================================
+.env
+.env.local
+.env.*
+# (Chỉ cho phép đẩy file mẫu .env.example lên GitHub)
+!.env.example
+
+# =========================================
+# 2. PYTHON & BACKEND (FASTAPI / TELEGRAM BOT)
+# =========================================
+# Bỏ qua file cache của Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Bỏ qua môi trường ảo (Virtual Environment)
+venv/
+.venv/
+env/
+/venv/
+
+# Bỏ qua file log
+*.log
+pip-log.txt
+
+# =========================================
+# 3. NODE.JS & FRONTEND (ADMIN DASHBOARD)
+# =========================================
+# Bỏ qua thư viện tải về
+node_modules/
+/apps/admin-dashboard/node_modules/
+
+# Bỏ qua file log của npm/yarn
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+
+# Bỏ qua thư mục build (Render sẽ tự build trên server)
+dist/
+/apps/admin-dashboard/dist/
+.output/
+
+# =========================================
+# 4. CƠ SỞ DỮ LIỆU (LOCAL)
+# =========================================
+# Bỏ qua các file SQLite test ở local (để tránh ghi đè dữ liệu thật)
+*.db
+*.sqlite
+*.sqlite3
+bot_database.db
+
+# =========================================
+# 5. HỆ ĐIỀU HÀNH & IDE (CODE EDITORS)
+# =========================================
+# Mac/Windows rác
+.DS_Store
+Thumbs.db
+
+# VS Code / PyCharm / IntelliJ
+.vscode/
+.idea/
+*.swp
+*.swo
