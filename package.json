@@ -1,0 +1,14 @@
+{
+  "name": "hendy-bot-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "install-all": "npm install",
+    "build:frontend": "npm run build --workspace=apps/admin-dashboard",
+    "build": "npm run build:frontend",
+    "start": "node apps/backend-api/src/index.js"
+  }
+}
