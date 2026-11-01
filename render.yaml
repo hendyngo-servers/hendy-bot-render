@@ -22,20 +22,11 @@ services:
       - key: DATABASE_SSL
         value: "true"
       - key: WEBAPP_URL
-        sync: false
-      - key: ALLOWED_ORIGINS
-        sync: false
+        fromService:
+          type: web
+          name: hendy-bot-render
+          envVarKey: RENDER_EXTERNAL_URL
       - key: TELEGRAM_WEBHOOK_SECRET
-        sync: false
+        generateValue: true
       - key: BANK_WEBHOOK_SECRET
-        sync: false
-      - key: VIETQR_BANK_ID
-        sync: false
-      - key: VIETQR_ACCOUNT_NO
-        sync: false
-      - key: VIETQR_ACCOUNT_NAME
-        sync: false
-      - key: GROUP_URL
-        sync: false
-      - key: CHANNEL_URL
-        sync: false
+        generateValue: true

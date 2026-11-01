@@ -30,6 +30,9 @@ if (!BOT_TOKEN || !/^\d+:.+$/.test(BOT_TOKEN)) {
 if (!/^\d{5,20}$/.test(ADMIN_ID)) {
   throw new Error('ADMIN_ID phải là Telegram user ID dạng số.');
 }
+if (RENDER_EXTERNAL_URL && !WEBHOOK_SECRET) {
+  throw new Error('TELEGRAM_WEBHOOK_SECRET là bắt buộc khi chạy webhook trên Render.');
+}
 if (WEBHOOK_SECRET && !/^[A-Za-z0-9_-]{1,256}$/.test(WEBHOOK_SECRET)) {
   throw new Error('TELEGRAM_WEBHOOK_SECRET chỉ được chứa chữ, số, _ hoặc - và tối đa 256 ký tự.');
 }

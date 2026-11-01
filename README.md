@@ -63,7 +63,7 @@ Khi không có `RENDER_EXTERNAL_URL`, bot dùng long polling. Trên Render, ứn
 5. Khai báo các biến tùy chọn theo chức năng: `WEBAPP_URL`, `ALLOWED_ORIGINS`, `TELEGRAM_WEBHOOK_SECRET`, `BANK_WEBHOOK_SECRET`, các biến VietQR và URL nhóm/kênh.
 6. Sau deploy, kiểm tra `https://<ten-dich-vu>.onrender.com/healthz` và mở trang chủ để xem dashboard.
 
-Render tự cung cấp `RENDER_EXTERNAL_URL`. Không cần tự điền biến này.
+Render tự cung cấp `RENDER_EXTERNAL_URL`. Blueprint tự ánh xạ URL này sang `WEBAPP_URL` và tự tạo `TELEGRAM_WEBHOOK_SECRET` cùng `BANK_WEBHOOK_SECRET`. Không cần tự điền hai biến này ở lần tạo dịch vụ đầu tiên.
 
 ## Biến môi trường
 
@@ -76,7 +76,7 @@ Render tự cung cấp `RENDER_EXTERNAL_URL`. Không cần tự điền biến n
 | `RENDER_EXTERNAL_URL` | Render tự cấp | Kích hoạt webhook Telegram |
 | `WEBAPP_URL` | Không | URL mở dashboard từ menu bot; mặc định dùng URL dịch vụ Render |
 | `ALLOWED_ORIGINS` | Không | Danh sách origin được phép gọi API/WS, phân tách bằng dấu phẩy |
-| `TELEGRAM_WEBHOOK_SECRET` | Khuyến nghị | Xác thực request webhook Telegram |
+| `TELEGRAM_WEBHOOK_SECRET` | Có trên Render | Xác thực request webhook Telegram |
 | `BANK_WEBHOOK_SECRET` | Có để nhận webhook ngân hàng | Header `x-bank-webhook-secret`; endpoint từ chối request nếu chưa cấu hình |
 | `VIETQR_BANK_ID` | Không | Mã ngân hàng VietQR |
 | `VIETQR_ACCOUNT_NO` | Không | Số tài khoản nhận tiền |
