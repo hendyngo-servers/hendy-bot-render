@@ -1,6 +1,8 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
+
 const express = require('express');
 const http = require('http');
-const path = require('path');
 const { timingSafeEqual } = require('crypto');
 const { Telegraf } = require('telegraf');
 const { WebSocketServer, WebSocket } = require('ws');
