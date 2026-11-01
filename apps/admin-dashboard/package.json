@@ -1,0 +1,6 @@
+{
+  "name": "admin-dashboard",
+  "scripts": {
+    "build": "mkdir -p dist/assets && cp index.html dist/index.html" 
+  }
+}
