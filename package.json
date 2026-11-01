@@ -1,8 +1,8 @@
 {
-  "name": "hendy-bot-render",
+  "name": "hendy-bot-monorepo",
   "version": "1.0.0",
   "scripts": {
     "build": "cd apps/admin-dashboard && npm install && npm run build",
-    "postbuild": "cd apps/backend-api && pip install -r requirements.txt"
+    "postbuild": "cd apps/backend-api && npm install"
   }
 }
