@@ -52,7 +52,7 @@ async function initDb() {
 
   // Upgrade REAL currency columns from the previous schema to exact integer VND.
   await pool.query(`
-    DO $
+    DO $migration$
     BEGIN
       IF EXISTS (
         SELECT 1 FROM information_schema.columns
@@ -89,7 +89,7 @@ async function initDb() {
           ALTER COLUMN amount TYPE NUMERIC(18, 0)
           USING COALESCE(ROUND(amount::numeric), 0);
       END IF;
-    END $;
+    END $migration$;
 
     UPDATE users
     SET balance = COALESCE(balance, 0),

@@ -174,16 +174,18 @@ app.post('/webhook/bank', async (req, res) => {
   }
 });
 
-if (WEBHOOK_SECRET) {
-  app.use('/webhook/telegram', (req, res, next) => {
+app.post(
+  '/webhook/telegram',
+  (req, res, next) => {
+    if (!WEBHOOK_SECRET) return next();
     const received = req.get('x-telegram-bot-api-secret-token') || '';
     if (!safeEqual(received, WEBHOOK_SECRET)) {
       return res.status(401).send('Unauthorized');
     }
     next();
-  });
-}
-app.use('/webhook/telegram', bot.webhookCallback('/webhook/telegram'));
+  },
+  bot.webhookCallback('/webhook/telegram')
+);
 
 const wss = new WebSocketServer({
   server,
