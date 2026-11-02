@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js && node --check src/database.js && node --check src/botClient.js && node --check src/botAdmin.js"
+    "check": "node --check src/index.js && node --check src/database.js && node --check src/botClient.js && node --check src/botAdmin.js && node --check src/telegramAuth.js && node --check src/api.js"
   },
   "dependencies": {
     "express": "^4.18.2",

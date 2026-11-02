@@ -85,16 +85,12 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-bank-webhook-secret');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-telegram-init-data, x-bank-webhook-secret, x-telegram-bot-api-secret-token');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 app.use(express.json({ limit: '256kb' }));
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-telegram-init-data, x-bank-webhook-secret, x-telegram-bot-api-secret-token');
-  next();
-});
 app.locals.bot = bot;
 app.use(apiRouter);
 

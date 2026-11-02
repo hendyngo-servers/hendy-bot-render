@@ -25,6 +25,8 @@ services:
         sync: false
       - key: DATABASE_SSL
         value: "true"
+      - key: BOT_USERNAME
+        sync: false
       - key: WEBAPP_URL
         fromService:
           type: web
