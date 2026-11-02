@@ -1,143 +1,248 @@
 const { Markup } = require('telegraf');
-const { getUser, updateBalance, logTransaction } = require('./database');
+const { getUser } = require('./database');
 
-const ADMIN_ID = process.env.ADMIN_ID || "YOUR_ADMIN_ID_HERE";
-const WEBAPP_URL = process.env.WEBAPP_URL || "https://your-mini-app.pages.dev";
-const GROUP_URL = process.env.GROUP_URL || "https://t.me/your_group";
-const CHANNEL_URL = process.env.CHANNEL_URL || "https://t.me/your_channel";
+const ADMIN_ID = String(process.env.ADMIN_ID || '');
+const WEBAPP_URL = process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || '';
+const GROUP_URL = process.env.GROUP_URL || '';
+const CHANNEL_URL = process.env.CHANNEL_URL || '';
+const VIETQR_BANK_ID = process.env.VIETQR_BANK_ID || '';
+const VIETQR_ACCOUNT_NO = process.env.VIETQR_ACCOUNT_NO || '';
+const VIETQR_ACCOUNT_NAME = process.env.VIETQR_ACCOUNT_NAME || '';
 
-// Lưu trạng thái nhập liệu tạm thời
 const userStates = new Map();
 
 function formatMoney(amount) {
-    return new Intl.NumberFormat('vi-VN').format(amount) + " VNĐ";
+  return new Intl.NumberFormat('vi-VN').format(Number(amount || 0)) + ' VNĐ';
 }
 
-// Bố cục Menu Y Hệt Hình Bạn Gửi
+function usableHttpsUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function getHomeKeyboard(userId) {
-    let buttons = [
-        [Markup.button.callback('🚀 MINIGAME LIVE', 'menu:minigame'), Markup.button.callback('🤖 THUÊ TOOL (NEW)', 'menu:tools')],
-        [Markup.button.callback('🛍 MƯA LÌ XÌ - CODE MÀN - CODE TELE', 'menu:lixi')],
-        [Markup.button.callback('💳 NẠP TIỀN', 'menu:wallet'), Markup.button.callback('🎁 OTP & PROXY', 'menu:otp')],
-        [Markup.button.callback('👑 KHO CÔNG CỤ ĐẶC QUYỀN', 'menu:vip_tools')],
-        [Markup.button.callback('💎 TRUNG TÂM KHÁCH HÀNG', 'menu:customer')],
-        [Markup.button.callback('🤼 HỆ THỐNG GHÉP ĐỐI ĐẦU', 'menu:matchmaking')],
-        [Markup.button.callback('👥 Giới thiệu REF', 'menu:ref'), Markup.button.callback('👑 TRUNG TÂM VIP', 'menu:vip')],
-        [Markup.button.url('💬 NHÓM CHAT', GROUP_URL), Markup.button.url('📢 KÊNH THÔNG BÁO', CHANNEL_URL)],
-        [Markup.button.callback('🎁 NHẬP GIFCODE', 'menu:giftcode'), Markup.button.callback('🎧 LIÊN HỆ CSKH', 'menu:support')]
-    ];
-    if (userId === ADMIN_ID) {
-        buttons.push([Markup.button.webApp('🛡️ BẢNG ĐIỀU KHIỂN ADMIN', WEBAPP_URL)]);
-    }
-    return Markup.inlineKeyboard(buttons);
+  const buttons = [
+    [Markup.button.callback('🚀 MINIGAME LIVE', 'menu:minigame'), Markup.button.callback('🤖 THUÊ TOOL', 'menu:tools')],
+    [Markup.button.callback('🛍 MUA CODE', 'menu:lixi')],
+    [Markup.button.callback('💳 NẠP TIỀN', 'menu:wallet'), Markup.button.callback('🎁 OTP & PROXY', 'menu:otp')],
+    [Markup.button.callback('👑 KHO VIP', 'menu:vip_tools')],
+    [Markup.button.callback('💎 TRUNG TÂM KHÁCH HÀNG', 'menu:customer')],
+    [Markup.button.callback('🤼 GHÉP ĐÔI', 'menu:matchmaking')],
+    [Markup.button.callback('👥 GIỚI THIỆU REF', 'menu:ref')]
+  ];
+
+  const group = usableHttpsUrl(GROUP_URL);
+  const channel = usableHttpsUrl(CHANNEL_URL);
+  if (group || channel) {
+    const links = [];
+    if (group) links.push(Markup.button.url('💬 NHÓM CHAT', group));
+    if (channel) links.push(Markup.button.url('📢 KÊNH THÔNG BÁO', channel));
+    buttons.push(links);
+  }
+
+  buttons.push([
+    Markup.button.callback('🎁 GIFTCODE', 'menu:giftcode'),
+    Markup.button.callback('🎧 LIÊN HỆ CSKH', 'menu:support')
+  ]);
+
+  const webApp = usableHttpsUrl(WEBAPP_URL);
+  if (userId === ADMIN_ID && webApp) {
+    buttons.push([Markup.button.webApp('🛡️ BẢNG ĐIỀU KHIỂN', webApp)]);
+  }
+
+  return Markup.inlineKeyboard(buttons);
 }
 
 function getBackButton() {
-    return Markup.inlineKeyboard([[Markup.button.callback('🏠 QUAY LẠI MENU', 'menu:home')]]);
+  return Markup.inlineKeyboard([[Markup.button.callback('🏠 QUAY LẠI MENU', 'menu:home')]]);
+}
+
+function buildQrUrl(amount, userId) {
+  if (!VIETQR_BANK_ID || !VIETQR_ACCOUNT_NO || !VIETQR_ACCOUNT_NAME) {
+    throw new Error('Chưa cấu hình tài khoản nhận tiền VietQR.');
+  }
+
+  const imagePath = [
+    encodeURIComponent(VIETQR_BANK_ID),
+    encodeURIComponent(VIETQR_ACCOUNT_NO),
+    'compact2.png'
+  ].join('-');
+  const params = new URLSearchParams({
+    amount: String(amount),
+    addInfo: 'NAP ' + userId,
+    accountName: VIETQR_ACCOUNT_NAME
+  });
+  return 'https://img.vietqr.io/image/' + imagePath + '?' + params.toString();
+}
+
+async function sendDepositQr(ctx, amount, userId) {
+  const reference = 'NAP ' + userId;
+  const qrUrl = buildQrUrl(amount, userId);
+  await ctx.replyWithPhoto(
+    { url: qrUrl },
+    {
+      caption: '🏦 THÔNG TIN NẠP TIỀN\n' +
+        'Số tiền: ' + formatMoney(amount) + '\n' +
+        'Nội dung chuyển khoản: ' + reference,
+      ...getBackButton()
+    }
+  );
 }
 
 async function sendWelcome(ctx, userId, userData, name) {
-    const text = `🤖 *HENDY CYBERTECH PRO 2026*\nXin chào sếp, *${name}*!\n🆔 ID: \`${userId}\`\n━━━━━━━━━━━━━━━━━━━━\n💰 Số dư: *${formatMoney(userData.balance)}*\n👑 Cấp độ: *VIP ${userData.vip_level}*\n━━━━━━━━━━━━━━━━━━━━\n👉 Lựa chọn tính năng bên dưới:`;
-    
-    if (ctx.callbackQuery) {
-        await ctx.editMessageText(text, { parse_mode: 'Markdown', ...getHomeKeyboard(userId) });
-    } else {
-        await ctx.reply(text, { parse_mode: 'Markdown', ...getHomeKeyboard(userId) });
+  const message =
+    '🤖 HENDY CYBERTECH\n' +
+    'Xin chào ' + (name || 'bạn') + '!\n' +
+    '🆔 ID: ' + userId + '\n' +
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    '💰 Số dư: ' + formatMoney(userData.balance) + '\n' +
+    '👑 Cấp độ: VIP ' + userData.vip_level + '\n' +
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    'Vui lòng chọn chức năng bên dưới:';
+
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(message, getHomeKeyboard(userId));
+      return;
+    } catch {
+      // Tin nhắn có thể đã bị xóa hoặc không thể chỉnh sửa.
     }
+  }
+  await ctx.reply(message, getHomeKeyboard(userId));
 }
 
 function setupBotClient(bot) {
-    bot.start(async (ctx) => {
-        const userId = String(ctx.from.id);
-        const refBy = ctx.startPayload ? ctx.startPayload.replace('ref_', '') : null;
-        const validRef = (refBy && refBy !== userId) ? refBy : null;
-        
-        const userData = await getUser(userId, ctx.from.first_name, ctx.from.username, validRef);
+  bot.start(async (ctx) => {
+    const userId = String(ctx.from.id);
+    const refBy = ctx.startPayload ? ctx.startPayload.replace(/^ref_/, '') : null;
+    const validRef = refBy && /^\d{5,20}$/.test(refBy) && refBy !== userId ? refBy : null;
+
+    const userData = await getUser(
+      userId,
+      ctx.from.first_name,
+      ctx.from.username,
+      validRef
+    );
+    userStates.delete(userId);
+    await sendWelcome(ctx, userId, userData, ctx.from.first_name);
+  });
+
+  bot.on('callback_query', async (ctx) => {
+    try {
+      const data = String(ctx.callbackQuery.data || '');
+      const userId = String(ctx.from.id);
+      const userData = await getUser(userId);
+
+      if (data === 'menu:home') {
         userStates.delete(userId);
         await sendWelcome(ctx, userId, userData, ctx.from.first_name);
-    });
+      } else if (data === 'menu:wallet') {
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback('50.000 VNĐ', 'deposit:50000'),
+            Markup.button.callback('100.000 VNĐ', 'deposit:100000')
+          ],
+          [Markup.button.callback('✍️ NHẬP SỐ TIỀN KHÁC', 'deposit:custom')],
+          [Markup.button.callback('🏠 QUAY LẠI', 'menu:home')]
+        ]);
+        await ctx.editMessageText(
+          '💳 NẠP TIỀN TỰ ĐỘNG\nSố dư hiện tại: ' + formatMoney(userData.balance) +
+          '\nChọn mệnh giá muốn nạp:',
+          keyboard
+        );
+      } else if (data.startsWith('deposit:')) {
+        const value = data.split(':')[1];
+        if (value === 'custom') {
+          userStates.set(userId, { action: 'deposit_custom' });
+          await ctx.editMessageText(
+            'Nhập số tiền muốn nạp (tối thiểu 10.000 VNĐ):',
+            getBackButton()
+          );
+        } else {
+          const amount = Number(value);
+          if (!Number.isSafeInteger(amount) || amount < 10000) {
+            throw new Error('Mệnh giá nạp không hợp lệ.');
+          }
+          await sendDepositQr(ctx, amount, userId);
+        }
+      } else if (data === 'menu:giftcode') {
+        userStates.set(userId, { action: 'wait_giftcode' });
+        await ctx.editMessageText('Vui lòng gửi mã giftcode cần kiểm tra:', getBackButton());
+      } else if (data === 'menu:support') {
+        userStates.set(userId, { action: 'wait_support_msg' });
+        await ctx.editMessageText(
+          'Hãy nhập nội dung cần hỗ trợ. Tin nhắn sẽ được chuyển đến quản trị viên.',
+          getBackButton()
+        );
+      } else {
+        const names = {
+          'menu:minigame': 'Mini Game Live',
+          'menu:tools': 'Thuê Tool',
+          'menu:lixi': 'Mua Code',
+          'menu:otp': 'OTP & Proxy',
+          'menu:vip_tools': 'Kho VIP',
+          'menu:customer': 'Trung tâm khách hàng',
+          'menu:matchmaking': 'Ghép đôi',
+          'menu:ref': 'Giới thiệu REF'
+        };
+        if (names[data]) {
+          await ctx.editMessageText(
+            'Chức năng ' + names[data] + ' hiện chưa được cấu hình.',
+            getBackButton()
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Xử lý callback Telegram thất bại:', error.message);
+      await ctx.reply('Đã xảy ra lỗi khi xử lý yêu cầu. Vui lòng thử lại sau.');
+    } finally {
+      await ctx.answerCbQuery().catch(() => {});
+    }
+  });
 
-    bot.on('callback_query', async (ctx) => {
-        const data = ctx.callbackQuery.data;
-        const userId = String(ctx.from.id);
-        const userData = await getUser(userId);
+  bot.on('text', async (ctx, next) => {
+    const userId = String(ctx.from.id);
+    const state = userStates.get(userId);
+    if (!state) return next();
 
-        if (data === 'menu:home') {
-            userStates.delete(userId);
-            await sendWelcome(ctx, userId, userData, ctx.from.first_name);
-        }
-        else if (data === 'menu:wallet') {
-            const text = `💳 *NẠP TIỀN TỰ ĐỘNG*\n💰 Số dư: *${formatMoney(userData.balance)}*\nChọn mệnh giá:`;
-            const kb = Markup.inlineKeyboard([
-                [Markup.button.callback('50K', 'deposit:50000'), Markup.button.callback('100K', 'deposit:100000')],
-                [Markup.button.callback('✍️ NHẬP SỐ KHÁC', 'deposit:custom')],
-                [Markup.button.callback('🏠 QUAY LẠI', 'menu:home')]
-            ]);
-            await ctx.editMessageText(text, { parse_mode: 'Markdown', ...kb });
-        }
-        else if (data.startsWith('deposit:')) {
-            const val = data.split(':')[1];
-            if (val === 'custom') {
-                userStates.set(userId, { action: 'deposit_custom' });
-                await ctx.editMessageText("✍️ Vui lòng nhập số tiền bạn muốn nạp (Ví dụ: 150000):", getBackButton());
-            } else {
-                const amount = parseInt(val);
-                const refCode = `NAP ${userId}`;
-                const qrUrl = `https://img.vietqr.io/image/VCB-1234567899-compact2.png?amount=${amount}&addInfo=${refCode}&accountName=HENDY`;
-                await ctx.deleteMessage();
-                await ctx.replyWithPhoto({ url: qrUrl }, { caption: `🏦 *NẠP TIỀN*\n• Số tiền: \`${formatMoney(amount)}\`\n• Nội dung: \`${refCode}\``, parse_mode: 'Markdown', ...getBackButton() });
-            }
-        }
-        else if (data === 'menu:giftcode') {
-            userStates.set(userId, { action: 'wait_giftcode' });
-            await ctx.editMessageText("🎁 Vui lòng nhập mã GIFCODE của bạn vào đây:", getBackButton());
-        }
-        else if (data === 'menu:support') {
-            userStates.set(userId, { action: 'wait_support_msg' });
-            await ctx.editMessageText("🎧 Gõ nội dung bạn cần hỗ trợ, Admin sẽ phản hồi sớm nhất:", getBackButton());
-        }
-        else {
-            const featureName = {
-                "menu:minigame": "🚀 Minigame Live", "menu:tools": "🤖 Thuê Tool", "menu:lixi": "🛍 Mưa Lì Xì",
-                "menu:otp": "🎁 OTP & Proxy", "menu:vip_tools": "👑 Kho Công Cụ VIP", "menu:customer": "💎 Trung Tâm KH",
-                "menu:matchmaking": "🤼 Hệ Thống Đối Đầu", "menu:ref": "👥 Giới thiệu", "menu:vip": "👑 VIP"
-            };
-            if (featureName[data]) {
-                await ctx.editMessageText(`🚧 Tính năng *${featureName[data]}* đang được cập nhật, vui lòng quay lại sau!`, { parse_mode: 'Markdown', ...getBackButton() });
-            }
-        }
-        await ctx.answerCbQuery();
-    });
+    const text = ctx.message.text.trim();
 
-    bot.on('text', async (ctx, next) => {
-        const userId = String(ctx.from.id);
-        if (!userStates.has(userId)) return next();
-        
-        const state = userStates.get(userId);
-        const text = ctx.message.text.trim();
+    if (state.action === 'deposit_custom') {
+      const amount = Number(text);
+      if (!Number.isSafeInteger(amount) || amount < 10000) {
+        await ctx.reply('Số tiền không hợp lệ. Vui lòng nhập số nguyên từ 10.000 VNĐ.');
+        return;
+      }
 
-        if (state.action === 'deposit_custom') {
-            if (isNaN(text) || parseInt(text) < 10000) {
-                return ctx.reply("❌ Số tiền không hợp lệ (Phải là số và >= 10,000).", getBackButton());
-            }
-            const amount = parseInt(text);
-            const refCode = `NAP ${userId}`;
-            const qrUrl = `https://img.vietqr.io/image/VCB-1234567899-compact2.png?amount=${amount}&addInfo=${refCode}&accountName=HENDY`;
-            userStates.delete(userId);
-            await ctx.replyWithPhoto({ url: qrUrl }, { caption: `🏦 *NẠP TIỀN*\nNội dung: \`${refCode}\`\nSố tiền: \`${formatMoney(amount)}\``, parse_mode: 'Markdown', ...getBackButton() });
-        }
-        else if (state.action === 'wait_giftcode') {
-            await ctx.reply("❌ Mã Giftcode không hợp lệ hoặc đã hết hạn.", getBackButton());
-            userStates.delete(userId);
-        }
-        else if (state.action === 'wait_support_msg') {
-            if (ADMIN_ID !== "YOUR_ADMIN_ID_HERE") {
-                await bot.telegram.sendMessage(ADMIN_ID, `🎧 *HỖ TRỢ CSKH*\nTừ ID: \`${userId}\`\nNội dung: ${text}`, { parse_mode: "Markdown" });
-            }
-            await ctx.reply("✅ Đã gửi yêu cầu hỗ trợ đến CSKH!", getBackButton());
-            userStates.delete(userId);
-        }
-    });
+      try {
+        await sendDepositQr(ctx, amount, userId);
+        userStates.delete(userId);
+      } catch (error) {
+        await ctx.reply(error.message, getBackButton());
+        userStates.delete(userId);
+      }
+    } else if (state.action === 'wait_giftcode') {
+      await ctx.reply('Không thể xác thực giftcode vì hệ thống chưa được cấu hình kho mã.');
+      userStates.delete(userId);
+    } else if (state.action === 'wait_support_msg') {
+      if (!/^\d{5,20}$/.test(ADMIN_ID)) {
+        await ctx.reply('Hệ thống chưa cấu hình quản trị viên.');
+      } else {
+        await bot.telegram.sendMessage(
+          ADMIN_ID,
+          'YÊU CẦU HỖ TRỢ MỚI\n' +
+          'Người gửi: ' + userId + '\n' +
+          'Nội dung: ' + text.slice(0, 3000)
+        );
+        await ctx.reply('Đã chuyển yêu cầu hỗ trợ đến quản trị viên.');
+      }
+      userStates.delete(userId);
+    }
+  });
 }
 
 module.exports = { setupBotClient };

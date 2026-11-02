@@ -1,9 +1,36 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
 services:
   - type: web
-    name: hendy-bot-node
-    env: node
-    buildCommand: "npm install && npm run build && npm run postbuild"
-    startCommand: "cd apps/backend-api && npm start"
+    name: hendy-bot-render
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    maxShutdownDelaySeconds: 60
+    autoDeployTrigger: checksPass
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: NODE_VERSION
-        value: 20
+        value: "22"
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: WEBAPP_URL
+        fromService:
+          type: web
+          name: hendy-bot-render
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: BANK_WEBHOOK_SECRET
+        generateValue: true

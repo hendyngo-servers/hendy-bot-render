@@ -1,7 +1,9 @@
 {
-  "name": "admin-dashboard",
-  "version": "1.0.0",
+  "name": "@hendy/admin-dashboard",
+  "version": "1.1.0",
+  "private": true,
   "scripts": {
-    "build": "mkdir -p dist/assets && cp index.html dist/index.html"
+    "build": "node build.js",
+    "check": "node --check build.js"
   }
 }
