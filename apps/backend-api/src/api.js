@@ -93,6 +93,50 @@ async function listProducts(category, includeInactive) {
   return result.rows.map(publicProduct);
 }
 
+router.post('/api/legacy/session/exchange', asyncRoute(async (req,res)=>{
+  const ticket=cleanText(req.body && req.body.ticket,128);
+  const secret=String(process.env.LEGACY_SESSION_SECRET || '');
+  if(secret.length<32) throw httpError(503,'Cổng đăng nhập website cũ chưa được cấu hình.');
+  if(!/^[a-f0-9]{64}$/i.test(ticket)) throw httpError(400,'Login ticket không hợp lệ.');
+  const tokenHash=crypto.createHash('sha256').update(ticket).digest('hex');
+  const client=await pool.connect();
+  let identity;
+  try {
+    await client.query('BEGIN');
+    const found=await client.query(
+      'SELECT user_id,bot_key FROM legacy_login_tickets WHERE token_hash=$1 AND consumed_at IS NULL AND expires_at>NOW() FOR UPDATE',
+      [tokenHash]
+    );
+    if(!found.rowCount) throw httpError(401,'Link đăng nhập đã hết hạn hoặc đã được sử dụng.');
+    identity=found.rows[0];
+    await client.query('UPDATE legacy_login_tickets SET consumed_at=NOW() WHERE token_hash=$1',[tokenHash]);
+    const user=await client.query('SELECT user_id,name,username,vip_level,balance FROM users WHERE user_id=$1',[identity.user_id]);
+    if(!user.rowCount) throw httpError(404,'Không tìm thấy hồ sơ thành viên.');
+    identity.user=user.rows[0];
+    await client.query('COMMIT');
+  } catch(error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+  const issuedAt=Math.floor(Date.now()/1000);
+  const header=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
+  const payload=Buffer.from(JSON.stringify({
+    sub:String(identity.user.user_id),
+    name:identity.user.name,
+    username:identity.user.username,
+    vipLevel:Number(identity.user.vip_level || 0),
+    balance:Number(identity.user.balance || 0),
+    bot:identity.bot_key,
+    aud:'hendy-legacy-account',
+    iat:issuedAt,
+    exp:issuedAt+300
+  })).toString('base64url');
+  const unsigned=header+'.'+payload;
+  const signature=crypto.createHmac('sha256',secret).update(unsigned).digest('base64url');
+  res.setHeader('Cache-Control','no-store');
+  res.json({token:unsigned+'.'+signature,tokenType:'Bearer',expiresInSeconds:300});
+}));
+
 router.use('/api', authenticateTelegram);
 
 router.get('/api/bootstrap', asyncRoute(async (req, res) => {

@@ -390,28 +390,68 @@ async function showOrders(ctx,userId) {
   return ctx.reply(lines.join('\n'),{parse_mode:'HTML'});
 }
 
-async function showLive(ctx,userId,config,pendingInputs) {
-  const accounts=await getLinkedAccounts(userId);
-  const actionMap=new Map();
-  const items=accounts.map(item=>{
-    const label=('🗑 '+item.brand+' · '+item.username).slice(0,60);
-    actionMap.set(label,'link-delete:'+item.id);
-    return {label,data:'member:link-delete:'+item.id,style:'danger'};
-  });
-  actionMap.set('➕ LIÊN KẾT TÀI KHOẢN','link-new');
-  actionMap.set('🏠 MENU CHÍNH','home');
-  items.push({label:'➕ LIÊN KẾT TÀI KHOẢN',data:'member:link-new',style:'success'});
-  items.push({label:'🏠 MENU CHÍNH',data:'member:home',style:'primary'});
-  const keyboard=makeSubmenu(config,items,'primary','',userId);
-  if(config.menu_mode!=='inline_keyboard') pendingInputs.set(userId,{type:'action_map',actions:actionMap,expiresAt:Date.now()+INPUT_TTL_MS});
-  return sendScreen(ctx,[
-    '🚀 <b>MINIGAME LIVE · QUẢN LÝ TÀI KHOẢN</b>',
-    '━━━━━━━━━━━━━━━━━━━━',
-    'Tài khoản đã liên kết: <b>'+accounts.length+'</b>',
-    'Thương hiệu hỗ trợ: '+ALLOWED_BRANDS.join(', '),
-    'Chỉ lưu tên đăng nhập và thương hiệu. Không gửi mật khẩu hoặc OTP vào bot.'
-  ].join('\n'),keyboard,config);
+async function createLegacyLoginUrl(userId,botKey) {
+  const configured=String(process.env.LEGACY_ACCOUNT_URL||'').trim();
+  const sharedSecret=String(process.env.LEGACY_SESSION_SECRET||'');
+  if(!/^https:\/\//i.test(configured) || sharedSecret.length<32) return null;
+
+  const ticket=crypto.randomBytes(32).toString('hex');
+  const tokenHash=crypto.createHash('sha256').update(ticket).digest('hex');
+  await pool.query(
+    "INSERT INTO legacy_login_tickets (token_hash,user_id,bot_key,expires_at) VALUES ($1,$2,$3,NOW()+INTERVAL '5 minutes')",
+    [tokenHash,String(userId),botKey]
+  );
+  const url=new URL(configured);
+  url.searchParams.set('login_ticket',ticket);
+  url.searchParams.set('bot',botKey);
+  return url.toString();
 }
+
+async function showLive(ctx,userId,config,pendingInputs,botKey) {
+  const miniUrl=getMiniAppUrl('customer',botKey);
+  const legacyUrl=await createLegacyLoginUrl(userId,botKey);
+  const accounts=await getLinkedAccounts(userId);
+  const rows=[];
+  if(miniUrl) rows.push([inlineWebAppButton('🚀 [MINI APP] BẢN MỚI | CHỈ MOBILE',miniUrl,'success')]);
+  else rows.push([callbackButton('🚀 MINI APP CHƯA CẤU HÌNH','member:admin-unavailable','danger')]);
+  if(legacyUrl) rows.push([urlButton('🔑 PHIÊN BẢN WEB CŨ · LINK 5 PHÚT',legacyUrl,'primary')]);
+  else rows.push([callbackButton('🔑 PHIÊN BẢN WEB CŨ · CHƯA CẤU HÌNH','member:legacy-unavailable','danger')]);
+  rows.push([callbackButton('📋 TÀI KHOẢN ĐÃ LIÊN KẾT ('+accounts.length+')','member:live-accounts','primary')]);
+  rows.push([callbackButton('🏠 TRỞ VỀ MENU CHÍNH','member:home','primary')]);
+
+  return ctx.reply([
+    '🧭 <b>TRUNG TÂM QUẢN LÝ TÀI KHOẢN</b>',
+    '━━━━━━━━━━━━━━━━━━━━',
+    'Chọn một trong hai cách truy cập bên dưới:',
+    '• <b>Mini App:</b> Trải nghiệm mới, mượt mà hơn (khuyến nghị, chỉ hỗ trợ thiết bị có Telegram Web App).',
+    '• <b>Đăng nhập truyền thống:</b> Link đăng nhập dùng một lần, có hiệu lực tối đa 5 phút.',
+    '',
+    'Tài khoản đã liên kết: <b>'+accounts.length+'</b>',
+    'Không gửi mật khẩu hoặc mã OTP cho bot.'
+  ].join('\n'),{
+    parse_mode:'HTML',
+    disable_web_page_preview:true,
+    reply_markup:inlineKeyboard(rows)
+  });
+}
+
+async function showLiveAccounts(ctx,userId) {
+  const accounts=await getLinkedAccounts(userId);
+  const rows=accounts.map(item=>[
+    callbackButton('🗑 '+item.brand+' · '+item.username,'member:link-delete:'+item.id,'danger')
+  ]);
+  rows.push([callbackButton('➕ LIÊN KẾT TÀI KHOẢN','member:link-new','success')]);
+  rows.push([callbackButton('⬅️ TRUNG TÂM QUẢN LÝ TÀI KHOẢN','member:live','primary')]);
+  rows.push([callbackButton('🏠 MENU CHÍNH','member:home','primary')]);
+  return ctx.reply([
+    '🔗 <b>TÀI KHOẢN ĐÃ LIÊN KẾT</b>',
+    '━━━━━━━━━━━━━━━━━━━━',
+    'Số tài khoản: <b>'+accounts.length+'</b>',
+    'Thương hiệu hỗ trợ: '+ALLOWED_BRANDS.join(', '),
+    'Chỉ lưu tên đăng nhập và thương hiệu; không lưu mật khẩu/OTP.'
+  ].join('\n'),{parse_mode:'HTML',reply_markup:inlineKeyboard(rows)});
+}
+
 
 async function showDuel(ctx,userId,bot,config) {
   const active=await pool.query(
@@ -507,7 +547,9 @@ async function dispatchAction(ctx,action,context) {
     });
   }
   if(action==='admin-unavailable') throw new Error('Hãy cấu hình MINI_APP_URL trong Render Environment.');
-  if(action==='live') return showLive(ctx,userId,config,pendingInputs);
+  if(action==='live') return showLive(ctx,userId,config,pendingInputs,botKey);
+  if(action==='live-accounts') return showLiveAccounts(ctx,userId);
+  if(action==='legacy-unavailable') throw new Error('Phiên bản web cũ chưa được cấu hình LEGACY_ACCOUNT_URL và LEGACY_SESSION_SECRET.');
   if(action==='tools') return sendCatalog(ctx,userId,'tools','🧰 HỆ THỐNG THUÊ TOOL AUTOMATION',config,{botKey,adminId},pendingInputs);
   if(action==='codes') return sendCatalog(ctx,userId,'codes','🎁 MUA LÌ XÌ · CODE MÀN · CODE TELE',config,{botKey,adminId},pendingInputs);
   if(action==='otp') return sendCatalog(ctx,userId,'otp','⚙️ TIỆN ÍCH OTP & INFRA PROXY',config,{botKey,adminId},pendingInputs);
@@ -589,7 +631,7 @@ async function dispatchAction(ctx,action,context) {
     const id=action.slice('link-delete:'.length);
     if(!/^\d{1,18}$/.test(id)) throw new Error('ID liên kết không hợp lệ.');
     await pool.query('DELETE FROM linked_accounts WHERE id=$1 AND user_id=$2',[id,userId]);
-    return showLive(ctx,userId,config,pendingInputs);
+    return showLiveAccounts(ctx,userId);
   }
   if(action.startsWith('duel-finish:')) {
     const id=action.slice('duel-finish:'.length);
