@@ -38,22 +38,26 @@ jobs:
         with:
           node-version: 22
       - name: Generate feature files
+        env:
+          FEATURE_NAME: ${{ inputs.feature_name }}
+          FEATURE_CATEGORY: ${{ inputs.category }}
+          FEATURE_DESCRIPTION: ${{ inputs.description }}
         run: |
           node scripts/scaffold-feature.js \
-            --name "\${{ inputs.feature_name }}" \
-            --category "\${{ inputs.category }}" \
-            --description "\${{ inputs.description }}"
+            --name "$FEATURE_NAME" \
+            --category "$FEATURE_CATEGORY" \
+            --description "$FEATURE_DESCRIPTION"
       - name: Create review pull request
         uses: peter-evans/create-pull-request@v7
         with:
-          token: \${{ secrets.GITHUB_TOKEN }}
-          branch: scaffold/\${{ inputs.feature_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: scaffold/${{ inputs.feature_name }}
           delete-branch: true
-          commit-message: "chore(scaffold): add \${{ inputs.feature_name }} feature"
-          title: "Scaffold feature: \${{ inputs.feature_name }}"
+          commit-message: "chore(scaffold): add ${{ inputs.feature_name }} feature"
+          title: "Scaffold feature: ${{ inputs.feature_name }}"
           body: |
-            Tự động tạo scaffold cho feature \${{ inputs.feature_name }}.
-            Loại: \${{ inputs.category }}
-            Mô tả: \${{ inputs.description }}
+            Tự động tạo scaffold cho feature ${{ inputs.feature_name }}.
+            Loại: ${{ inputs.category }}
+            Mô tả: ${{ inputs.description }}
 
             Tệp mới ở trạng thái disabled. Review phân quyền, API, migration và test trước khi bật.

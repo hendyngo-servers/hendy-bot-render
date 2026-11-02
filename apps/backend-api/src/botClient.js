@@ -240,6 +240,7 @@ async function sendCatalog(ctx,userId,category,title,config,botContext,pendingIn
     productActions.set(label,'order:'+row.id);
     return {label,data:'member:order:'+row.id,style:'success'};
   });
+  productActions.set('🏠 MENU CHÍNH','home');
   items.push({label:'🏠 MENU CHÍNH',data:'member:home',style:'primary'});
   const keyboard=makeSubmenu(config,items,botContext.botKey,botContext.adminId,userId);
   if(config.menu_mode!=='inline_keyboard') {
@@ -397,6 +398,8 @@ async function showLive(ctx,userId,config,pendingInputs) {
     actionMap.set(label,'link-delete:'+item.id);
     return {label,data:'member:link-delete:'+item.id,style:'danger'};
   });
+  actionMap.set('➕ LIÊN KẾT TÀI KHOẢN','link-new');
+  actionMap.set('🏠 MENU CHÍNH','home');
   items.push({label:'➕ LIÊN KẾT TÀI KHOẢN',data:'member:link-new',style:'success'});
   items.push({label:'🏠 MENU CHÍNH',data:'member:home',style:'primary'});
   const keyboard=makeSubmenu(config,items,'primary','',userId);
@@ -476,6 +479,20 @@ async function showDuel(ctx,userId,bot,config) {
 
 async function dispatchAction(ctx,action,context) {
   const {bot,botKey,adminId,pendingInputs,config,userId}=context;
+  if(action.startsWith('order:')) {
+    const order=await createMemberOrder(userId,action.slice('order:'.length));
+    return ctx.reply([
+      '✅ <b>ĐÃ TẠO ĐƠN HÀNG</b>',
+      'Sản phẩm: <b>'+escapeHtml(order.product_name)+'</b>',
+      'Mã đơn: <code>'+escapeHtml(order.order_code)+'</code>',
+      'Số tiền: '+money(order.amount),
+      'Trạng thái: Chờ Admin xử lý.',
+      'Số dư còn lại: '+money(order.balance)
+    ].join('\\n'),{parse_mode:'HTML',reply_markup:inlineKeyboard([
+      [callbackButton('🧾 LỊCH SỬ ĐƠN HÀNG','member:orders','primary')],
+      [callbackButton('🏠 MENU CHÍNH','member:home','primary')]
+    ])});
+  }
   if(action==='home') {
     pendingInputs.delete(userId);
     return sendHome(ctx,userId,{botKey,adminId},config);
