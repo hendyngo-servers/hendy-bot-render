@@ -250,6 +250,14 @@ async function updateBalance(userId, amount, isDeposit = false) {
        RETURNING balance`,
       [value, Boolean(isDeposit), String(userId)]
     );
+    if (!isDeposit) {
+      const reference = 'botadmin:' + require('crypto').randomBytes(12).toString('hex');
+      await client.query(
+        "INSERT INTO wallet_ledger (reference_code,user_id,amount,transaction_type,description) " +
+        "VALUES ($1,$2,$3,'ADMIN_CREDIT',$4)",
+        [reference, String(userId), value, 'Cộng tiền bởi quản trị viên qua Telegram']
+      );
+    }
 
     await client.query('COMMIT');
     return result.rows[0];

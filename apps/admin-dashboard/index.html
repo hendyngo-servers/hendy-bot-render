@@ -671,10 +671,8 @@
         buttons:[
           {id:'home',type:'default',text:'Trang chủ'},
           {id:'wallet',type:'default',text:'Ví điện tử'},
-          {id:'orders',type:'default',text:'Đơn hàng'},
-          {id:'customer',type:'default',text:'Trung tâm khách hàng'},
-          {id:'support',type:'default',text:'Chăm sóc khách hàng'}
-        ].concat(state.boot && state.boot.isAdmin ? [{id:'admin',type:'default',text:'Bảng điều khiển Admin'}] : [])
+          {id:'orders',type:'default',text:'Đơn hàng'}
+        ]
       }, id=>{if(id) navigate(id);});
     } else {
       navigate(state.boot && state.boot.isAdmin ? 'admin' : 'customer');
