@@ -376,12 +376,15 @@ router.post('/api/matchmaking/join', asyncRoute(async (req, res) => {
 
   if (match) {
     const opponentId = match.player_one === userId ? match.player_two : match.player_one;
-    const opponent = await getUser(opponentId);
-    const opponentName = opponent && (opponent.name || opponent.username) || 'Thành viên Hendy';
+    const opponentResult = await pool.query('SELECT name,username FROM users WHERE user_id=$1',[opponentId]);
+    const opponentName = opponentResult.rows[0] && (opponentResult.rows[0].name || opponentResult.rows[0].username) || 'Thành viên Hendy';
     if (req.app.locals.bot) {
-      const message = '🎮 Bạn đã được ghép đôi! Đối thủ: ' + opponentName + ' · Mã ghép: #' + match.id;
-      for (const id of [userId,opponentId]) {
-        try { await req.app.locals.bot.telegram.sendMessage(id,message); }
+      for (const recipientId of [userId,opponentId]) {
+        const otherId = recipientId === userId ? opponentId : userId;
+        const otherResult = await pool.query('SELECT name,username FROM users WHERE user_id=$1',[otherId]);
+        const otherName = otherResult.rows[0] && (otherResult.rows[0].name || otherResult.rows[0].username) || 'Thành viên Hendy';
+        const message = '🎮 Bạn đã được ghép đôi! Đối thủ: ' + otherName + ' · Mã ghép: #' + match.id;
+        try { await req.app.locals.bot.telegram.sendMessage(recipientId,message); }
         catch (error) { console.warn('Không gửi được tin nhắn ghép đôi:',error.message); }
       }
     }
