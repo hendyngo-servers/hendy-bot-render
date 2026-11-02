@@ -386,31 +386,85 @@ router.get('/api/admin/orders', asyncRoute(async (req, res) => {
 }));
 
 router.patch('/api/admin/orders/:id', asyncRoute(async (req, res) => {
+  if (!/^\d{1,18}$/.test(req.params.id)) throw httpError(400, 'ID đơn hàng không hợp lệ.');
   const status = cleanText(req.body && req.body.status, 24);
   const adminNote = cleanText(req.body && req.body.adminNote, 1000);
   const deliveryText = cleanText(req.body && req.body.deliveryText, 5000);
   if (!allowedStatuses.includes(status)) throw httpError(400, 'Trạng thái đơn hàng không hợp lệ.');
-  const result = await pool.query(
-    'UPDATE orders SET status=$1,admin_note=$2,delivery_text=$3,updated_at=NOW() WHERE id=$4 RETURNING *',
-    [status,adminNote,deliveryText,req.params.id]
-  );
-  if (!result.rowCount) throw httpError(404, 'Không tìm thấy đơn hàng.');
-  const order = result.rows[0];
-  if (status === 'completed' && order.product_id) {
-    const product = await pool.query('SELECT vip_level FROM products WHERE id=$1', [order.product_id]);
-    if (product.rowCount && Number(product.rows[0].vip_level) > 0) {
-      await pool.query('UPDATE users SET vip_level=GREATEST(vip_level,$1) WHERE user_id=$2', [Number(product.rows[0].vip_level),order.user_id]);
+
+  const client = await pool.connect();
+  let order;
+  let refunded = false;
+  try {
+    await client.query('BEGIN');
+    const found = await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!found.rowCount) throw httpError(404, 'Không tìm thấy đơn hàng.');
+    const current = found.rows[0];
+    const terminal = ['completed', 'rejected', 'cancelled'];
+    if (terminal.includes(current.status) && current.status !== status) {
+      throw httpError(409, 'Đơn hàng đã kết thúc và không thể thay đổi trạng thái.');
     }
+
+    const updated = await client.query(
+      'UPDATE orders SET status=$1,admin_note=$2,delivery_text=$3,updated_at=NOW() WHERE id=$4 RETURNING *',
+      [status, adminNote, deliveryText, req.params.id]
+    );
+    order = updated.rows[0];
+
+    if (['rejected', 'cancelled'].includes(status) && !terminal.includes(current.status)) {
+      const amount = Number(current.amount);
+      if (amount > 0) {
+        const credit = await client.query(
+          'INSERT INTO wallet_ledger (reference_code,user_id,amount,transaction_type,description) ' +
+          "VALUES ($1,$2,$3,'ORDER_REFUND',$4) ON CONFLICT (reference_code) DO NOTHING RETURNING id",
+          ['refund:' + current.order_code, current.user_id, amount, 'Hoàn tiền đơn ' + current.order_code]
+        );
+        if (credit.rowCount) {
+          await client.query('UPDATE users SET balance=balance+$1 WHERE user_id=$2', [amount, current.user_id]);
+          await client.query(
+            "INSERT INTO transactions (user_id,amount,type,reference_code,status) VALUES ($1,$2,'ORDER_REFUND',$3,'paid')",
+            [current.user_id, amount, current.order_code]
+          );
+          refunded = true;
+        }
+      }
+      if (current.product_id) {
+        await client.query(
+          'UPDATE products SET stock=stock+1,updated_at=NOW() WHERE id=$1 AND stock IS NOT NULL',
+          [current.product_id]
+        );
+      }
+    }
+
+    if (status === 'completed' && current.status !== 'completed' && current.product_id) {
+      const product = await client.query('SELECT vip_level FROM products WHERE id=$1', [current.product_id]);
+      if (product.rowCount && Number(product.rows[0].vip_level) > 0) {
+        await client.query(
+          'UPDATE users SET vip_level=GREATEST(vip_level,$1) WHERE user_id=$2',
+          [Number(product.rows[0].vip_level), current.user_id]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-  await audit(req.telegramUser.id, 'order.update', order.order_code, { status });
+
+  await audit(req.telegramUser.id, 'order.update', order.order_code, { status, refunded });
   if (req.app.locals.bot) {
     const notice = status === 'completed'
       ? 'Đơn hàng ' + order.order_code + ' đã hoàn tất.' + (deliveryText ? '\nThông tin bàn giao:\n' + deliveryText : '')
-      : 'Đơn hàng ' + order.order_code + ' đã cập nhật trạng thái: ' + status;
+      : (refunded
+        ? 'Đơn hàng ' + order.order_code + ' đã bị hủy/từ chối. Số tiền ' + new Intl.NumberFormat('vi-VN').format(Number(order.amount)) + ' VNĐ đã được hoàn vào ví.'
+        : 'Đơn hàng ' + order.order_code + ' đã cập nhật trạng thái: ' + status);
     try { await req.app.locals.bot.telegram.sendMessage(order.user_id, notice); }
     catch (error) { console.error('Không gửi được thông báo đơn hàng:', error.message); }
   }
-  res.json({ order });
+  res.json({ order, refunded });
 }));
 
 router.get('/api/admin/users', asyncRoute(async (req, res) => {
