@@ -1,0 +1,67 @@
+:root {
+  --btn-primary-start: #147ff4;
+  --btn-primary-end: #4d4ee8;
+  --btn-success-start: #16bd82;
+  --btn-success-end: #078f79;
+  --btn-danger-start: #f06478;
+  --btn-danger-end: #d93e66;
+  --btn-neutral-bg: #edf3ff;
+  --btn-neutral-text: #3159bd;
+  --btn-focus: rgba(53,112,232,.28);
+}
+
+/* Bảng màu tập trung cho tất cả nút Mini App. Chỉnh token tại :root. */
+button {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease, background .16s ease;
+}
+button:focus-visible {
+  outline: 3px solid var(--btn-focus);
+  outline-offset: 2px;
+}
+button:active:not(:disabled) {
+  transform: translateY(1px) scale(.985);
+  filter: brightness(.97);
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+  box-shadow: none;
+}
+.primary {
+  color: #fff;
+  background: linear-gradient(115deg,var(--btn-primary-start),var(--btn-primary-end));
+  box-shadow: 0 7px 15px rgba(43,91,215,.24);
+}
+.secondary,.tiny-btn {
+  color: var(--btn-neutral-text);
+  background: var(--btn-neutral-bg);
+  border: 1px solid #d8e4ff;
+}
+.danger {
+  color: #fff;
+  background: linear-gradient(115deg,var(--btn-danger-start),var(--btn-danger-end));
+  box-shadow: 0 7px 15px rgba(217,62,102,.2);
+}
+.service-tile.g-blue { background: linear-gradient(135deg,#138af9,#3456e8); }
+.service-tile.g-violet { background: linear-gradient(135deg,#a347f5,#642cce); }
+.service-tile.g-green { background: linear-gradient(135deg,#18c78b,#0a9f79); }
+.service-tile.g-orange { background: linear-gradient(135deg,#ffb34d,#ed7628); }
+.service-tile.g-pink { background: linear-gradient(135deg,#fb73b4,#de3d87); }
+.service-tile.g-cyan { background: linear-gradient(135deg,#32cde4,#1688c8); }
+.service-tile.g-gold { background: linear-gradient(135deg,#ffce52,#e99519); }
+.service-tile.g-navy { background: linear-gradient(135deg,#354c91,#16295f); }
+.service-tile:hover { filter:brightness(1.04); box-shadow:0 12px 23px rgba(34,62,121,.23); }
+.tab.active {
+  background:linear-gradient(115deg,var(--btn-primary-start),var(--btn-primary-end));
+  border-color:transparent;
+  color:#fff;
+}
+.admin-tab.active {
+  background:linear-gradient(115deg,#192d65,#344c91);
+  border-color:transparent;
+  color:#fff;
+}
+.nav-btn.active { color:#245bd0; background:#e8efff; }
+.icon-btn { color:#36568e; background:#fff; border:1px solid #dce5ff; }
+button:not(:disabled):hover { filter:brightness(1.035); }
