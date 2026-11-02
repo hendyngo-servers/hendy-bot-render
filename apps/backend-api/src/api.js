@@ -378,13 +378,13 @@ router.post('/api/matchmaking/join', asyncRoute(async (req, res) => {
     const opponentId = match.player_one === userId ? match.player_two : match.player_one;
     const opponentResult = await pool.query('SELECT name,username FROM users WHERE user_id=$1',[opponentId]);
     const opponentName = opponentResult.rows[0] && (opponentResult.rows[0].name || opponentResult.rows[0].username) || 'Thành viên Hendy';
-    if (req.app.locals.bot) {
+    if (req.app.locals.bots && req.app.locals.bots[req.botKey]) {
       for (const recipientId of [userId,opponentId]) {
         const otherId = recipientId === userId ? opponentId : userId;
         const otherResult = await pool.query('SELECT name,username FROM users WHERE user_id=$1',[otherId]);
         const otherName = otherResult.rows[0] && (otherResult.rows[0].name || otherResult.rows[0].username) || 'Thành viên Hendy';
         const message = '🎮 Bạn đã được ghép đôi! Đối thủ: ' + otherName + ' · Mã ghép: #' + match.id;
-        try { await req.app.locals.bot.telegram.sendMessage(recipientId,message); }
+        try { await req.app.locals.bots[req.botKey].api.sendMessage(recipientId,message); }
         catch (error) { console.warn('Không gửi được tin nhắn ghép đôi:',error.message); }
       }
     }
@@ -607,13 +607,13 @@ router.patch('/api/admin/orders/:id', asyncRoute(async (req, res) => {
   }
 
   await audit(req.telegramUser.id, 'order.update', order.order_code, { status, refunded });
-  if (req.app.locals.bot) {
+  if (req.app.locals.bots && req.app.locals.bots[req.botKey]) {
     const notice = status === 'completed'
       ? 'Đơn hàng ' + order.order_code + ' đã hoàn tất.' + (deliveryText ? '\nThông tin bàn giao:\n' + deliveryText : '')
       : (refunded
         ? 'Đơn hàng ' + order.order_code + ' đã bị hủy/từ chối. Số tiền ' + new Intl.NumberFormat('vi-VN').format(Number(order.amount)) + ' VNĐ đã được hoàn vào ví.'
         : 'Đơn hàng ' + order.order_code + ' đã cập nhật trạng thái: ' + status);
-    try { await req.app.locals.bot.telegram.sendMessage(order.user_id, notice); }
+    try { await req.app.locals.bots[req.botKey].api.sendMessage(order.user_id, notice); }
     catch (error) { console.error('Không gửi được thông báo đơn hàng:', error.message); }
   }
   res.json({ order, refunded });
@@ -682,8 +682,8 @@ router.patch('/api/admin/tickets/:id', asyncRoute(async (req, res) => {
   );
   if (!result.rowCount) throw httpError(404, 'Không tìm thấy yêu cầu hỗ trợ.');
   await audit(req.telegramUser.id, 'support.reply', req.params.id, { status });
-  if (reply && req.app.locals.bot) {
-    try { await req.app.locals.bot.telegram.sendMessage(result.rows[0].user_id, '🎧 Phản hồi từ Trung tâm khách hàng:\n' + reply); }
+  if (reply && req.app.locals.bots && req.app.locals.bots[req.botKey]) {
+    try { await req.app.locals.bots[req.botKey].api.sendMessage(result.rows[0].user_id, '🎧 Phản hồi từ Trung tâm khách hàng:\n' + reply); }
     catch (error) { console.error('Không gửi được phản hồi CSKH:', error.message); }
   }
   res.json({ ticket: result.rows[0] });
@@ -742,6 +742,96 @@ router.patch('/api/admin/giftcodes/:code', asyncRoute(async (req, res) => {
   if (!result.rowCount) throw httpError(404, 'Không tìm thấy giftcode.');
   await audit(req.telegramUser.id, 'giftcode.toggle', code, { isActive });
   res.json({ giftcode:result.rows[0] });
+}));
+
+router.get('/api/admin/bot-menus', asyncRoute(async (req,res)=>{
+  const result=await pool.query('SELECT * FROM bot_menu_configs ORDER BY bot_key');
+  const configs={primary:process.env.BOT_TOKEN?true:false,secondary:process.env.BOT_SECOND_TOKEN?true:false};
+  res.json({
+    menus:result.rows.map(row=>({
+      botKey:row.bot_key,
+      configured:configs[row.bot_key],
+      menuMode:row.menu_mode,
+      introText:row.intro_text,
+      menuColumns:Number(row.menu_columns),
+      persistentKeyboard:Boolean(row.persistent_keyboard),
+      resizeKeyboard:Boolean(row.resize_keyboard),
+      buttonLabels:row.button_labels||{},
+      buttonDescriptions:row.button_descriptions||{},
+      buttonStyles:row.button_styles||{},
+      updatedAt:row.updated_at
+    }))
+  });
+}));
+
+router.patch('/api/admin/bot-menus/:botKey', asyncRoute(async (req,res)=>{
+  const botKey=String(req.params.botKey||'');
+  if(!['primary','secondary'].includes(botKey)) throw httpError(400,'Bot không hợp lệ.');
+  if(botKey==='secondary'&&!process.env.BOT_SECOND_TOKEN) throw httpError(409,'BOT_SECOND_TOKEN chưa được cấu hình trong Render Environment.');
+  const body=req.body||{};
+  const mode=body.menuMode;
+  const columns=Number(body.menuColumns);
+  if(!['reply_keyboard','inline_keyboard'].includes(mode)) throw httpError(400,'Loại menu phải là reply_keyboard hoặc inline_keyboard.');
+  if(!Number.isInteger(columns)||columns<1||columns>3) throw httpError(400,'Số cột menu phải từ 1 đến 3.');
+
+  const allowedActions=new Set([
+    'live','tools','codes','wallet','otp','viptools','customer','duel','ref','vip',
+    'group','news','gift','support','admin'
+  ]);
+  function validateMap(value,label,maxLength,allowedValues) {
+    if(value==null) return {};
+    if(typeof value!=='object'||Array.isArray(value)) throw httpError(400,label+' phải là đối tượng JSON.');
+    const result={};
+    for(const [key,raw] of Object.entries(value)) {
+      if(!allowedActions.has(key)) throw httpError(400,'Khóa nút không hợp lệ: '+key);
+      const text=String(raw==null?'':raw).trim();
+      if(text.length>maxLength) throw httpError(400,label+' có giá trị quá dài.');
+      if(allowedValues&&!allowedValues.includes(text)) throw httpError(400,'Màu nút không hợp lệ.');
+      if(text) result[key]=text;
+    }
+    return result;
+  }
+  const labels=validateMap(body.buttonLabels,'Tên nút',60);
+  const descriptions=validateMap(body.buttonDescriptions,'Mô tả nút',160);
+  const styles=validateMap(body.buttonStyles,'Màu nút',12,['primary','success','danger']);
+  const introText=String(body.introText||'').trim().slice(0,600);
+  const persistent=body.persistentKeyboard!==false;
+  const resize=body.resizeKeyboard!==false;
+
+  const saved=await pool.query(
+    `INSERT INTO bot_menu_configs
+      (bot_key,menu_mode,intro_text,menu_columns,persistent_keyboard,resize_keyboard,button_labels,button_descriptions,button_styles,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,NOW())
+     ON CONFLICT (bot_key) DO UPDATE SET
+       menu_mode=EXCLUDED.menu_mode,
+       intro_text=EXCLUDED.intro_text,
+       menu_columns=EXCLUDED.menu_columns,
+       persistent_keyboard=EXCLUDED.persistent_keyboard,
+       resize_keyboard=EXCLUDED.resize_keyboard,
+       button_labels=EXCLUDED.button_labels,
+       button_descriptions=EXCLUDED.button_descriptions,
+       button_styles=EXCLUDED.button_styles,
+       updated_at=NOW()
+     RETURNING *`,
+    [botKey,mode,introText,columns,persistent,resize,JSON.stringify(labels),JSON.stringify(descriptions),JSON.stringify(styles)]
+  );
+  const updated={
+    botKey:saved.rows[0].bot_key,
+    menuMode:saved.rows[0].menu_mode,
+    introText:saved.rows[0].intro_text,
+    menuColumns:Number(saved.rows[0].menu_columns),
+    persistentKeyboard:Boolean(saved.rows[0].persistent_keyboard),
+    resizeKeyboard:Boolean(saved.rows[0].resize_keyboard),
+    buttonLabels:saved.rows[0].button_labels||{},
+    buttonDescriptions:saved.rows[0].button_descriptions||{},
+    buttonStyles:saved.rows[0].button_styles||{},
+    updatedAt:saved.rows[0].updated_at
+  };
+  await audit(req.telegramUser.id,'bot-menu.update',botKey,{menuMode:mode,menuColumns:columns});
+  if(typeof req.app.locals.broadcastAdmin==='function') {
+    req.app.locals.broadcastAdmin('bot.menu.updated',updated);
+  }
+  res.json({success:true,menu:updated,message:'Đã lưu cấu hình menu. Thay đổi có hiệu lực ở lần mở menu tiếp theo.'});
 }));
 
 router.get('/api/admin/giftcodes', asyncRoute(async (req, res) => {
