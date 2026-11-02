@@ -120,6 +120,10 @@
     .toast{position:fixed;z-index:70;bottom:calc(90px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);padding:11px 15px;border-radius:13px;color:#fff;background:#152654;box-shadow:0 10px 30px #14214e40;font-size:12px;max-width:90vw;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s}
     .toast.show{opacity:1}
     .loading{padding:35px 10px;text-align:center;color:#7784a3;font-size:12px}
+    .live-indicator{display:inline-flex;align-items:center;gap:7px;border:1px solid #dbe5fa;background:#fff;color:#75809d;border-radius:30px;padding:6px 10px;font-size:10px;font-weight:800;margin:-6px 0 12px}
+    .live-indicator.online{color:#147b51;background:#e8fbf2;border-color:#b9edd2}
+    .live-indicator.offline{color:#9a6814;background:#fff7e8;border-color:#f6dfb5}
+    .json-help{font-size:10px;color:#76819c;line-height:1.5}
     .hidden{display:none!important}
     @media(min-width:760px){
       .shell{padding:24px 24px 35px}
@@ -146,6 +150,7 @@
     </header>
     <div id="page-title">Đang tải ứng dụng</div>
     <p id="page-subtitle">Đang xác thực phiên Telegram…</p>
+    <div class="live-indicator" id="live-indicator" aria-live="polite">● Realtime chưa xác thực</div>
     <main id="app"><div class="loading">Đang kết nối máy chủ…</div></main>
   </div>
   <nav class="bottom-nav" aria-label="Điều hướng chính">
@@ -165,6 +170,10 @@
   const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   if (tg) { tg.ready(); tg.expand(); }
   const initData = tg ? tg.initData : '';
+  const botKey = new URLSearchParams(window.location.search).get('bot') === 'secondary' ? 'secondary' : 'primary';
+  let realtimeSocket = null;
+  let realtimeRetry = null;
+  let realtimeStopped = false;
   const state = { boot:null, page:'home', category:'minigame', adminTab:'overview', wallet:null, orders:[], tickets:[], adminData:{}, editingProductId:null };
   const $ = id => document.getElementById(id);
   const money = value => new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + ' VNĐ';
@@ -195,7 +204,8 @@
       method:method || 'GET',
       headers:{
         'Content-Type':'application/json',
-        'Authorization':'tma ' + initData
+        'Authorization':'tma ' + initData,
+        'X-Telegram-Bot-Key':botKey
       },
       body:body === undefined ? undefined : JSON.stringify(body),
       cache:'no-store'
@@ -414,12 +424,13 @@
     if (tab === 'orders') state.adminData.orders = (await api('/api/admin/orders')).orders;
     if (tab === 'tickets') state.adminData.tickets = (await api('/api/admin/tickets')).tickets;
     if (tab === 'settings') state.adminData.settings = (await api('/api/admin/settings')).settings;
+    if (tab === 'bot-menus') state.adminData.botMenus = (await api('/api/admin/bot-menus')).menus;
     if (tab === 'giftcodes') state.adminData.giftcodes = (await api('/api/admin/giftcodes')).giftcodes;
     if (tab === 'users') state.adminData.users = (await api('/api/admin/users')).users;
   }
 
   function adminTabs() {
-    const tabs = [['overview','Tổng quan'],['products','Sản phẩm'],['orders','Đơn hàng'],['tickets','CSKH'],['users','Thành viên'],['giftcodes','Giftcode'],['settings','Cấu hình']];
+    const tabs = [['overview','Tổng quan'],['products','Sản phẩm'],['orders','Đơn hàng'],['tickets','CSKH'],['users','Thành viên'],['giftcodes','Giftcode'],['settings','Cấu hình'],['bot-menus','Menu & Bot']];
     return '<div class="admin-tabs">' + tabs.map(tab =>
       '<button class="admin-tab ' + (state.adminTab === tab[0] ? 'active' : '') + '" data-admin-tab="' + tab[0] + '">' + tab[1] + '</button>'
     ).join('') + '</div>';
@@ -505,6 +516,35 @@
       '<div class="notice warn">Các trường trên là cấu hình nghiệp vụ không phải secret. BOT_TOKEN, DATABASE_URL, WEBHOOK_SECRET và API key chỉ thay đổi trong Render Environment, không lưu ở cơ sở dữ liệu ứng dụng.</div>';
   }
 
+
+  function adminBotMenus() {
+    const menus = state.adminData.botMenus || [];
+    const json = value => escapeHtml(JSON.stringify(value || {}, null, 2));
+    return '<div class="notice">Mỗi bot có cấu hình độc lập. Reply Keyboard là lưới nút cố định dưới ô nhập; Inline Keyboard nằm ngay dưới tin nhắn. Thay đổi được lưu PostgreSQL và áp dụng ở lần mở menu tiếp theo.</div>' +
+      menus.map(menu => {
+        const title = menu.botKey === 'primary' ? 'BOT CHÍNH · BOT_TOKEN' : 'BOT THỨ HAI · BOT_SECOND_TOKEN';
+        const selected = value => menu.menuMode === value ? ' selected' : '';
+        return '<form class="card form" id="admin-bot-menu-form" data-bot-key="' + escapeHtml(menu.botKey) + '">' +
+          '<div class="record-top"><div><b>' + title + '</b><small class="muted">Key: ' + escapeHtml(menu.botKey) + '</small></div>' +
+          '<span class="status ' + (menu.configured ? 'completed' : 'cancelled') + '">' + (menu.configured ? 'Đã cấu hình token' : 'Chưa có token') + '</span></div>' +
+          '<div class="field"><label>Kiểu menu</label><select name="menuMode">' +
+          '<option value="reply_keyboard"' + selected('reply_keyboard') + '>Reply Keyboard · lưới cố định phía dưới</option>' +
+          '<option value="inline_keyboard"' + selected('inline_keyboard') + '>Inline Keyboard · dưới tin nhắn</option></select></div>' +
+          '<div class="two-col"><div class="field"><label>Số cột nút (1–3)</label><select name="menuColumns">' +
+          [1,2,3].map(n => '<option value="' + n + '"' + (Number(menu.menuColumns) === n ? ' selected' : '') + '>' + n + ' cột</option>').join('') +
+          '</select></div><div class="field"><label>Giới thiệu đầu menu</label><input name="introText" maxlength="600" value="' + escapeHtml(menu.introText || '') + '"></div></div>' +
+          '<div class="two-col"><label class="small"><input type="checkbox" name="persistentKeyboard" ' + (menu.persistentKeyboard ? 'checked' : '') + '> Giữ Reply Keyboard luôn hiển thị</label>' +
+          '<label class="small"><input type="checkbox" name="resizeKeyboard" ' + (menu.resizeKeyboard ? 'checked' : '') + '> Tự co chiều cao bàn phím</label></div>' +
+          '<div class="field"><label>JSON tên nút theo action</label><textarea name="buttonLabels" rows="5" spellcheck="false">' + json(menu.buttonLabels) + '</textarea><div class="json-help">Ví dụ: {"live":"🚀 MINI GAME","wallet":"💳 NẠP TIỀN"}.</div></div>' +
+          '<div class="field"><label>JSON mô tả chức năng từng nút</label><textarea name="buttonDescriptions" rows="5" spellcheck="false">' + json(menu.buttonDescriptions) + '</textarea><div class="json-help">Các mô tả xuất hiện trong phần giới thiệu menu. Action hợp lệ: live, tools, codes, wallet, otp, viptools, customer, duel, ref, vip, group, news, gift, support, admin.</div></div>' +
+          '<div class="field"><label>JSON màu cho từng nút</label><textarea name="buttonStyles" rows="5" spellcheck="false">' + json(menu.buttonStyles) + '</textarea><div class="json-help">Chỉ dùng primary (xanh dương), success (xanh lá), danger (đỏ). Ví dụ: {"live":"primary","wallet":"success","gift":"success","support":"danger"}.</div></div>' +
+          '<button class="primary">Lưu cấu hình ' + (menu.botKey === 'primary' ? 'Bot chính' : 'Bot thứ hai') + '</button>' +
+          '</form>';
+      }).join('') +
+      '<div class="notice warn">Không nhập BOT_TOKEN, BOT_SECOND_TOKEN, DATABASE_URL hoặc webhook secret tại đây. Các token được quản lý riêng trong Render Environment.</div>';
+  }
+
+
   function adminGiftcodes() {
     const codes = state.adminData.giftcodes || [];
     return '<form class="card form" id="admin-gift-form"><b>Tạo Giftcode</b><div class="field"><label>Mã (để trống sẽ tự tạo)</label><input name="code" maxlength="64"></div>' +
@@ -537,6 +577,7 @@
     if (state.adminTab === 'orders') body = adminOrders();
     if (state.adminTab === 'tickets') body = adminTickets();
     if (state.adminTab === 'settings') body = adminSettings();
+    if (state.adminTab === 'bot-menus') body = adminBotMenus();
     if (state.adminTab === 'giftcodes') body = adminGiftcodes();
     if (state.adminTab === 'users') body = adminUsers();
     return '<div class="notice good">Đã xác thực quyền quản trị cho Telegram ID ' + escapeHtml(state.boot.user.id) + '.</div>' +
@@ -569,6 +610,54 @@
     } catch (error) {
       $('app').innerHTML = '<div class="notice warn">' + escapeHtml(error.message) + '</div><button class="secondary" data-page="home">Quay về trang chủ</button>';
     }
+  }
+
+  function setRealtimeStatus(text,online) {
+    const node = $('live-indicator');
+    if (!node) return;
+    node.textContent = '● ' + text;
+    node.classList.toggle('online',Boolean(online));
+    node.classList.toggle('offline',!online);
+  }
+
+  function connectAdminRealtime() {
+    if (!state.boot || !state.boot.isAdmin || !initData || realtimeStopped) return;
+    if (realtimeSocket && (realtimeSocket.readyState === WebSocket.OPEN || realtimeSocket.readyState === WebSocket.CONNECTING)) return;
+    const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    realtimeSocket = new WebSocket(scheme + '//' + location.host + '/ws');
+    realtimeSocket.addEventListener('open',() => {
+      realtimeSocket.send(JSON.stringify({type:'authenticate',botKey,initData}));
+    });
+    realtimeSocket.addEventListener('message',event => {
+      let message;
+      try { message = JSON.parse(event.data); } catch { return; }
+      if (message.type === 'authenticated') {
+        setRealtimeStatus('Realtime đã xác thực · ' + message.botKey,true);
+      } else if (message.type === 'runtime.snapshot' || message.type === 'runtime.heartbeat') {
+        const bots = message.payload && message.payload.bots || [];
+        const current = bots.find(item => item.key === botKey);
+        setRealtimeStatus(current ? 'Realtime · ' + botKey + ' · ' + current.status : 'Realtime đã kết nối',true);
+      } else if (message.type === 'bot.menu.updated') {
+        const menu = message.payload || {};
+        if (menu.botKey === botKey) {
+          toast('Cấu hình menu ' + botKey + ' vừa được cập nhật.');
+          if (state.page === 'admin' && state.adminTab === 'bot-menus') renderPage();
+        }
+      } else if (message.type === 'bot.status') {
+        const bots = message.payload && message.payload.bots || [];
+        const current = bots.find(item => item.key === botKey);
+        if (current) setRealtimeStatus('Bot ' + botKey + ' · ' + current.status,true);
+      }
+    });
+    realtimeSocket.addEventListener('close',() => {
+      setRealtimeStatus('Realtime mất kết nối · đang thử lại',false);
+      realtimeSocket = null;
+      if (!realtimeStopped && state.boot && state.boot.isAdmin) {
+        window.clearTimeout(realtimeRetry);
+        realtimeRetry = window.setTimeout(connectAdminRealtime,5000);
+      }
+    });
+    realtimeSocket.addEventListener('error',() => setRealtimeStatus('Realtime có lỗi kết nối',false));
   }
 
   function navigate(page) {
@@ -730,6 +819,29 @@
         await api('/api/admin/settings','PATCH',data);
         toast('Đã lưu cấu hình.');
         await renderPage();
+      } else if (form.id === 'admin-bot-menu-form') {
+        const parseJson = (value,label) => {
+          try {
+            const parsed = JSON.parse(value || '{}');
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+            return parsed;
+          } catch {
+            throw new Error(label + ' phải là JSON object hợp lệ.');
+          }
+        };
+        const payload = {
+          menuMode:data.menuMode,
+          menuColumns:Number(data.menuColumns),
+          introText:data.introText || '',
+          persistentKeyboard:form.elements.persistentKeyboard.checked,
+          resizeKeyboard:form.elements.resizeKeyboard.checked,
+          buttonLabels:parseJson(data.buttonLabels,'Tên nút'),
+          buttonDescriptions:parseJson(data.buttonDescriptions,'Mô tả nút'),
+          buttonStyles:parseJson(data.buttonStyles,'Màu nút')
+        };
+        await api('/api/admin/bot-menus/' + form.dataset.botKey,'PATCH',payload);
+        toast('Đã lưu cấu hình menu cho ' + form.dataset.botKey + '.');
+        await renderPage();
       } else if (form.id === 'admin-gift-form') {
         data.rewardAmount = Number(data.rewardAmount);
         data.maxRedemptions = Number(data.maxRedemptions);
@@ -783,6 +895,7 @@
     }
     try {
       state.boot = await api('/api/bootstrap');
+      if (state.boot.isAdmin) connectAdminRealtime();
       $('profile-name').textContent = state.boot.user.name || 'Thành viên';
       $('brand-name').textContent = state.boot.settings.homepage_title || 'Hendy Bot';
       $('profile-chip').querySelector('.avatar').textContent = (state.boot.user.name || 'H').slice(0,1).toUpperCase();
@@ -797,6 +910,11 @@
       $('app').innerHTML='<div class="notice warn">' + escapeHtml(error.message) + '</div>';
     }
   }
+  window.addEventListener('beforeunload',() => {
+    realtimeStopped = true;
+    window.clearTimeout(realtimeRetry);
+    if (realtimeSocket) realtimeSocket.close();
+  });
   start();
 })();
 </script>
