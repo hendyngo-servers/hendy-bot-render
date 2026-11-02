@@ -136,7 +136,7 @@
     <header class="topbar">
       <div class="brand">
         <div class="logo">H</div>
-        <div><b>Hendy Bot</b><small>Trung tâm dịch vụ · Hỗ trợ 24/7</small></div>
+        <div><b id="brand-name">Hendy Bot</b><small>Trung tâm dịch vụ · Hỗ trợ 24/7</small></div>
       </div>
       <div class="top-actions">
         <div class="profile-chip" id="profile-chip"><span class="avatar">?</span><span id="profile-name">Đang tải</span></div>
@@ -164,7 +164,7 @@
   const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   if (tg) { tg.ready(); tg.expand(); }
   const initData = tg ? tg.initData : '';
-  const state = { boot:null, page:'home', category:'minigame', adminTab:'overview', wallet:null, orders:[], tickets:[], adminData:{} };
+  const state = { boot:null, page:'home', category:'minigame', adminTab:'overview', wallet:null, orders:[], tickets:[], adminData:{}, editingProductId:null };
   const $ = id => document.getElementById(id);
   const money = value => new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + ' VNĐ';
   const escapeHtml = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -172,6 +172,7 @@
   const icons = {minigame:'🎮',tools:'🗂️',codes:'🛍️',otp:'🛡️',proxy:'🌐',vip:'👑'};
   const pageTitles = {
     home:['Trang chủ','Chọn dịch vụ và quản lý tài khoản Hendy Bot.'],
+    matchmaking:['Ghép đôi','Tìm người chơi phù hợp và tạo lượt ghép trực tiếp.'],
     minigame:['Mini Game Live','Danh sách trò chơi và gói tham gia đang mở.'],
     tools:['App / Tool','Quản lý danh sách công cụ và thời hạn thuê.'],
     codes:['Mua Code','Chọn mã bản quyền và theo dõi bàn giao.'],
@@ -248,6 +249,7 @@
       ['wallet','👛','Ví điện tử','Nạp tiền · Lịch sử','g-orange'],
       ['otp','🛡️','OTP & Proxy','Dịch vụ bảo mật','g-cyan'],
       ['vip','👑','Thành viên VIP','Đặc quyền hội viên','g-gold'],
+      ['matchmaking','🤝','Ghép đôi','Tìm đối thủ trực tuyến','g-cyan'],
       ['support','🎧','CSKH','Hỗ trợ và lịch sử','g-pink'],
       ['giftcode','🎁','Giftcode','Nhận quà tặng','g-violet'],
       ['referrals','👥','Giới thiệu REF','Chia sẻ nhận thưởng','g-blue']
@@ -373,6 +375,25 @@
     return '<div class="hero"><div class="eyebrow">GIFT & REWARD</div><h2>Quà tặng dành cho bạn 🎁</h2><p>Nhập mã giftcode còn hiệu lực để nhận thưởng vào số dư ví.</p></div>' +
       '<form class="card form" id="giftcode-form"><div class="field"><label>Mã Giftcode</label><input name="code" maxlength="64" placeholder="NHẬP MÃ GIFTCode" required></div>' +
       '<button class="primary">Kiểm tra và nhận thưởng</button></form>';
+  }
+
+  async function renderMatchmaking() {
+    const data = await api('/api/matchmaking');
+    if (data.status === 'matched') {
+      return '<div class="hero"><div class="eyebrow">MATCH FOUND</div><h2>Đã tìm thấy đối thủ 🤝</h2><p>Hai tài khoản đã được ghép thành công. Hãy trao đổi và bắt đầu lượt chơi theo quy tắc của bạn.</p></div>' +
+        '<div class="card"><div class="field"><label>Đối thủ</label><b>' + escapeHtml(data.opponentName) + '</b><p class="small muted">Telegram ID: ' + escapeHtml(data.opponentId) + '</p></div>' +
+        '<div class="code-box"><span>Mã ghép #' + escapeHtml(data.matchId) + '</span><button class="tiny-btn" data-copy="' + escapeHtml(data.matchId) + '">Sao chép</button></div>' +
+        '<button class="primary" data-match-finish="' + escapeHtml(data.matchId) + '" style="width:100%;margin-top:12px">Kết thúc lượt ghép</button></div>';
+    }
+    if (data.status === 'waiting') {
+      return '<div class="hero"><div class="eyebrow">MATCHMAKING</div><h2>Đang tìm người chơi…</h2><p>Hệ thống sẽ ghép bạn với thành viên đang chờ trong cùng chế độ.</p></div>' +
+        '<div class="notice">Bạn đang ở hàng chờ từ ' + new Date(data.createdAt).toLocaleString('vi-VN') + '.</div>' +
+        '<div class="two-col"><button class="secondary" data-match-refresh>Làm mới trạng thái</button><button class="danger" data-match-leave>Rời hàng chờ</button></div>';
+    }
+    return '<div class="hero"><div class="eyebrow">HENDY MATCH</div><h2>Tìm bạn chơi phù hợp 🎮</h2><p>Tham gia hàng chờ để kết nối với người chơi khác đang trực tuyến.</p></div>' +
+      '<div class="card"><div class="field"><label>Chế độ ghép đôi</label><select id="match-mode"><option value="quick">Ghép nhanh</option><option value="practice">Luyện tập</option></select></div>' +
+      '<button class="primary" data-match-join style="width:100%">🤝 Tìm đối thủ ngay</button></div>' +
+      '<div class="notice">Ghép đôi hiện kết nối người dùng trong hàng chờ. Luật chơi, tính điểm, giải thưởng hoặc phòng game trực tiếp cần tích hợp thêm nền tảng trò chơi tương ứng.</div>';
   }
 
   async function renderVip() {
@@ -525,6 +546,7 @@
       else if (page === 'referrals') html = await renderReferrals();
       else if (page === 'giftcode') html = renderGiftcode();
       else if (page === 'vip') html = await renderVip();
+      else if (page === 'matchmaking') html = await renderMatchmaking();
       else if (page === 'admin') html = await renderAdmin();
       else html = renderHome();
       $('app').innerHTML = html;
@@ -556,6 +578,34 @@
     if (adminTab) {
       state.adminTab=adminTab.dataset.adminTab;
       await renderPage();
+      return;
+    }
+    const joinMatch = event.target.closest('[data-match-join]');
+    if (joinMatch) {
+      const mode = $('match-mode').value;
+      joinMatch.disabled = true;
+      try {
+        const result = await api('/api/matchmaking/join','POST',{mode});
+        toast(result.status === 'matched' ? 'Đã tìm thấy đối thủ.' : 'Đã vào hàng chờ ghép đôi.');
+        await renderPage();
+      } catch (error) { toast(error.message); joinMatch.disabled = false; }
+      return;
+    }
+    const leaveMatch = event.target.closest('[data-match-leave]');
+    if (leaveMatch) {
+      try { await api('/api/matchmaking/leave','POST',{}); toast('Đã rời hàng chờ.'); await renderPage(); }
+      catch (error) { toast(error.message); }
+      return;
+    }
+    const refreshMatch = event.target.closest('[data-match-refresh]');
+    if (refreshMatch) { await renderPage(); return; }
+    const finishMatch = event.target.closest('[data-match-finish]');
+    if (finishMatch) {
+      try {
+        await api('/api/matchmaking/finish','POST',{matchId:finishMatch.dataset.matchFinish});
+        toast('Đã kết thúc lượt ghép.');
+        await renderPage();
+      } catch (error) { toast(error.message); }
       return;
     }
     const buy = event.target.closest('[data-buy]');
@@ -690,9 +740,10 @@
     try {
       state.boot = await api('/api/bootstrap');
       $('profile-name').textContent = state.boot.user.name || 'Thành viên';
+      $('brand-name').textContent = state.boot.settings.homepage_title || 'Hendy Bot';
       $('profile-chip').querySelector('.avatar').textContent = (state.boot.user.name || 'H').slice(0,1).toUpperCase();
       const requested = new URLSearchParams(location.search).get('section');
-      const valid = ['home','minigame','tools','codes','otp','proxy','vip','wallet','orders','customer','support','referrals','giftcode','admin'];
+      const valid = ['home','minigame','tools','codes','otp','proxy','vip','wallet','orders','customer','support','referrals','giftcode','matchmaking','admin'];
       state.page = valid.includes(requested) ? requested : 'home';
       if (state.page === 'admin' && !state.boot.isAdmin) state.page = 'home';
       renderPage();
