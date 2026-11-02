@@ -395,6 +395,7 @@ async function createLegacyLoginUrl(userId,botKey) {
   const sharedSecret=String(process.env.LEGACY_SESSION_SECRET||'');
   if(!/^https:\/\//i.test(configured) || sharedSecret.length<32) return null;
 
+  await pool.query("DELETE FROM legacy_login_tickets WHERE expires_at < NOW()-INTERVAL '1 day' OR consumed_at < NOW()-INTERVAL '1 day'");
   const ticket=crypto.randomBytes(32).toString('hex');
   const tokenHash=crypto.createHash('sha256').update(ticket).digest('hex');
   await pool.query(
@@ -528,7 +529,7 @@ async function dispatchAction(ctx,action,context) {
       'Số tiền: '+money(order.amount),
       'Trạng thái: Chờ Admin xử lý.',
       'Số dư còn lại: '+money(order.balance)
-    ].join('\\n'),{parse_mode:'HTML',reply_markup:inlineKeyboard([
+    ].join('\n'),{parse_mode:'HTML',reply_markup:inlineKeyboard([
       [callbackButton('🧾 LỊCH SỬ ĐƠN HÀNG','member:orders','primary')],
       [callbackButton('🏠 MENU CHÍNH','member:home','primary')]
     ])});
