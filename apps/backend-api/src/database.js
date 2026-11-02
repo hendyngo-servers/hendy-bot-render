@@ -331,6 +331,32 @@ async function processDeposit({ userId, amount, referenceCode }) {
        VALUES ($1, $2, $3, 'DEPOSIT', 'Nạp tiền qua ngân hàng')`,
       ['deposit:' + reference, String(userId), value]
     );
+    const referralResult = await client.query(
+      'SELECT ref_by FROM users WHERE user_id = $1',
+      [String(userId)]
+    );
+    const rateResult = await client.query(
+      "SELECT value FROM app_settings WHERE key = 'referral_commission_percent'"
+    );
+    const rate = Math.max(0, Math.min(30, Number(rateResult.rows[0] && rateResult.rows[0].value || 0)));
+    const referrerId = referralResult.rows[0] && referralResult.rows[0].ref_by;
+    const referralReward = Math.floor(value * rate / 100);
+    if (referrerId && referralReward > 0) {
+      await client.query(
+        'UPDATE users SET balance = balance + $1 WHERE user_id = $2',
+        [referralReward, referrerId]
+      );
+      await client.query(
+        "INSERT INTO wallet_ledger (reference_code, user_id, amount, transaction_type, description) " +
+        "VALUES ($1, $2, $3, 'REFERRAL_REWARD', $4)",
+        ['referral:' + reference, referrerId, referralReward, 'Hoa hồng giới thiệu từ giao dịch ' + reference]
+      );
+      await client.query(
+        "INSERT INTO transactions (user_id, amount, type, reference_code, status) " +
+        "VALUES ($1, $2, 'REFERRAL_REWARD', $3, 'paid')",
+        [referrerId, referralReward, reference]
+      );
+    }
 
     await client.query('COMMIT');
     return { duplicate: false, user: updated.rows[0] };

@@ -1,5 +1,5 @@
 const { Markup } = require('telegraf');
-const { getUser } = require('./database');
+const { getUser, pool } = require('./database');
 
 const ADMIN_ID = String(process.env.ADMIN_ID || '');
 const WEBAPP_URL = process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || '';
@@ -34,7 +34,18 @@ function appButton(label, section) {
     : Markup.button.callback(label, 'app:missing');
 }
 
-function getHomeKeyboard(userId) {
+async function getHomeKeyboard(userId) {
+  let groupUrl = GROUP_URL;
+  let channelUrl = CHANNEL_URL;
+  try {
+    const result = await pool.query('SELECT key, value FROM app_settings WHERE key = ANY($1::text[])', [['GROUP_URL', 'CHANNEL_URL']]);
+    for (const row of result.rows) {
+      if (row.key === 'GROUP_URL' && row.value) groupUrl = row.value;
+      if (row.key === 'CHANNEL_URL' && row.value) channelUrl = row.value;
+    }
+  } catch (error) {
+    console.warn('Không thể tải liên kết nhóm/kênh từ cấu hình:', error.message);
+  }
   const rows = [
     [appButton('🎮 MINI GAME LIVE', 'minigame'), appButton('🗂 APP / TOOL', 'tools')],
     [appButton('🛍 MUA CODE', 'codes'), appButton('👛 VÍ ĐIỆN TỬ', 'wallet')],
@@ -43,8 +54,8 @@ function getHomeKeyboard(userId) {
     [appButton('🎁 GIFTCODE', 'giftcode'), appButton('👥 GIỚI THIỆU REF', 'referrals')]
   ];
 
-  const group = usableHttpsUrl(GROUP_URL);
-  const channel = usableHttpsUrl(CHANNEL_URL);
+  const group = usableHttpsUrl(groupUrl);
+  const channel = usableHttpsUrl(channelUrl);
   if (group || channel) {
     const links = [];
     if (group) links.push(Markup.button.url('💬 NHÓM CHAT', group));
@@ -74,15 +85,16 @@ async function sendWelcome(ctx, userId, userData, name) {
     '━━━━━━━━━━━━━━━━━━━━\\n' +
     'Chọn chức năng bên dưới để mở Mini App:';
 
+  const keyboard = await getHomeKeyboard(userId);
   if (ctx.callbackQuery) {
     try {
-      await ctx.editMessageText(text, getHomeKeyboard(userId));
+      await ctx.editMessageText(text, keyboard);
       return;
     } catch (error) {
       // Gửi tin mới nếu tin nhắn cũ không thể chỉnh sửa.
     }
   }
-  await ctx.reply(text, getHomeKeyboard(userId));
+  await ctx.reply(text, keyboard);
 }
 
 function setupBotClient(bot) {

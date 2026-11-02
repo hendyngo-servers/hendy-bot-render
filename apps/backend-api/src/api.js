@@ -75,7 +75,7 @@ function publicProduct(row) {
     durationDays: Number(row.duration_days || 0),
     stock: row.stock == null ? null : Number(row.stock),
     vipLevel: Number(row.vip_level || 0), imageUrl: row.image_url || '',
-    metadata: row.metadata || {}
+    isActive: Boolean(row.is_active), metadata: row.metadata || {}
   };
 }
 async function listProducts(category, includeInactive) {
