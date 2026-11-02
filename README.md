@@ -74,7 +74,7 @@ Render tự cung cấp `RENDER_EXTERNAL_URL` và Blueprint tự ánh xạ URL n�
 | `DATABASE_URL` | Có | Kết nối PostgreSQL |
 | `DATABASE_SSL` | Không | Mặc định bật TLS; đặt `false` cho PostgreSQL local |
 | `RENDER_EXTERNAL_URL` | Render tự cấp | Kích hoạt webhook Telegram |
-| `WEBAPP_URL` | Không | URL mở dashboard từ menu bot; mặc định dùng URL dịch vụ Render |
+| `WEBAPP_URL` | Không | URL mở dashboard dự phòng |\n| `MINI_APP_URL` | Không | URL mở Mini App Admin; mặc định dùng `WEBAPP_URL` hoặc URL Render |
 | `ALLOWED_ORIGINS` | Không | Danh sách origin được phép gọi API/WS, phân tách bằng dấu phẩy |
 | `TELEGRAM_WEBHOOK_SECRET` | Có trên Render | Xác thực request webhook Telegram |
 | `BANK_WEBHOOK_SECRET` | Có để nhận webhook ngân hàng | Header `x-bank-webhook-secret`; endpoint từ chối request nếu chưa cấu hình |
