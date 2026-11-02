@@ -554,6 +554,6 @@ router.use('/api', (error, req, res, next) => {
   res.status(error.status || 500).json({
     error: error.status && error.status < 500 ? error.message : 'Lỗi máy chủ. Vui lòng thử lại.'
   });
-}));
+});
 
 module.exports = router;
