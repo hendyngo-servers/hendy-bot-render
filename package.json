@@ -10,7 +10,8 @@
   "scripts": {
     "build": "npm run build --workspace=@hendy/admin-dashboard",
     "start": "npm run start --workspace=@hendy/backend-api",
-    "check": "npm run check --workspace=@hendy/backend-api && npm run check --workspace=@hendy/admin-dashboard"
+    "check": "npm run check --workspace=@hendy/backend-api && npm run check --workspace=@hendy/admin-dashboard",
+    "scaffold:feature": "node scripts/scaffold-feature.js"
   },
   "engines": {
     "node": ">=20"
