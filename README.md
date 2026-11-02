@@ -94,3 +94,11 @@ Nhập BOT_TOKEN, ADMIN_ID, DATABASE_URL, TELEGRAM_WEBHOOK_SECRET. Nếu dùng b
 Repository trước đây đã có file mẫu chứa chuỗi giống thông tin xác thực thật. Cần thu hồi Bot Token cũ, đổi credential PostgreSQL và tạo lại webhook secrets. Sửa file mẫu không xóa bí mật khỏi Git history.
 
 CI kiểm tra cú pháp backend, unit tests button theme/scaffold và build dashboard. Trước production cần kiểm thử thực tế cả webhook/polling của hai bot, Reply Keyboard trên Telegram mobile/desktop và giao dịch PostgreSQL.
+
+## Trung tâm quản lý tài khoản và đăng nhập web cũ
+
+Nút MINIGAME LIVE mở Trung tâm quản lý tài khoản với hai lựa chọn: Mini App mới và phiên bản web cũ. Link web cũ chỉ được tạo khi cấu hình LEGACY_ACCOUNT_URL và LEGACY_SESSION_SECRET.
+
+Mỗi link cũ chứa ticket ngẫu nhiên 256-bit, chỉ lưu SHA-256 hash trong PostgreSQL, hết hạn sau 5 phút và chỉ được đổi một lần qua POST /api/legacy/session/exchange. Backend đổi ticket lấy JWT HS256 có hạn 5 phút. Website cũ phải xác minh chữ ký JWT bằng LEGACY_SESSION_SECRET. Không dùng ticket query string như một phiên đăng nhập lâu dài.
+
+Không gửi mật khẩu hoặc OTP qua Telegram Bot.

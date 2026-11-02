@@ -20,7 +20,8 @@ services:
       - key: BOT_TOKEN
         sync: false
       - key: ADMIN_ID
-        sync: false      - key: BOT_SECOND_TOKEN
+        sync: false
+      - key: BOT_SECOND_TOKEN
         sync: false
       - key: BOT_SECOND_ADMIN_ID
         sync: false
@@ -41,7 +42,12 @@ services:
           name: hendy-bot-render
           envVarKey: RENDER_EXTERNAL_URL
       - key: TELEGRAM_WEBHOOK_SECRET
-        sync: false      - key: TELEGRAM_SECOND_WEBHOOK_SECRET
+        sync: false
+      - key: TELEGRAM_SECOND_WEBHOOK_SECRET
         sync: false
       - key: BANK_WEBHOOK_SECRET
         generateValue: true
+      - key: LEGACY_ACCOUNT_URL
+        sync: false
+      - key: LEGACY_SESSION_SECRET
+        sync: false
