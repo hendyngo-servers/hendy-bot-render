@@ -32,6 +32,11 @@ services:
           type: web
           name: hendy-bot-render
           envVarKey: RENDER_EXTERNAL_URL
+      - key: MINI_APP_URL
+        fromService:
+          type: web
+          name: hendy-bot-render
+          envVarKey: RENDER_EXTERNAL_URL
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
       - key: BANK_WEBHOOK_SECRET

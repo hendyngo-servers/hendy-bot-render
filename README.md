@@ -74,7 +74,7 @@ Render tự cung cấp `RENDER_EXTERNAL_URL` và Blueprint tự ánh xạ URL n�
 | `DATABASE_URL` | Có | Kết nối PostgreSQL |
 | `DATABASE_SSL` | Không | Mặc định bật TLS; đặt `false` cho PostgreSQL local |
 | `RENDER_EXTERNAL_URL` | Render tự cấp | Kích hoạt webhook Telegram |
-| `WEBAPP_URL` | Không | URL mở dashboard từ menu bot; mặc định dùng URL dịch vụ Render |
+| `WEBAPP_URL` | Không | URL mở dashboard dự phòng |\n| `MINI_APP_URL` | Không | URL mở Mini App Admin; mặc định dùng `WEBAPP_URL` hoặc URL Render |
 | `ALLOWED_ORIGINS` | Không | Danh sách origin được phép gọi API/WS, phân tách bằng dấu phẩy |
 | `TELEGRAM_WEBHOOK_SECRET` | Có trên Render | Xác thực request webhook Telegram |
 | `BANK_WEBHOOK_SECRET` | Có để nhận webhook ngân hàng | Header `x-bank-webhook-secret`; endpoint từ chối request nếu chưa cấu hình |
@@ -116,7 +116,7 @@ Repository trước đây từng có file mẫu chứa chuỗi trông giống th
 
 ## Mini App khách hàng và Bảng điều khiển Admin
 
-Mở bot bằng `/start`. Các nút Mini Game Live, App/Tool, Mua Code, Ví điện tử, OTP & Proxy, VIP, Trung tâm khách hàng, CSKH, Giftcode và Giới thiệu REF sẽ mở đúng trang trong Telegram Mini App.
+Mở bot bằng `/start`. Các nút thành viên dùng callback member:* và xử lý trực tiếp trong Telegram Bot theo luồng menu 9 nhóm. Chỉ nút Bảng điều khiển Admin mở Mini App qua MINI_APP_URL.
 
 Mini App chỉ chấp nhận Telegram Web App `initData` đã được xác thực bằng HMAC với Bot Token; không tin `initDataUnsafe` hoặc Telegram ID do trình duyệt tự gửi. Phiên mặc định hết hạn sau 24 giờ. Admin được xác định ở backend bằng cách so Telegram ID đã ký với `ADMIN_ID`; ẩn nút trên giao diện chỉ là tiện ích hiển thị, không phải cơ chế phân quyền.
 
@@ -141,9 +141,24 @@ Mini App chỉ chấp nhận Telegram Web App `initData` đã được xác th�
 
 Các sản phẩm OTP/Proxy, công cụ cho thuê và Mini Game được vận hành theo mô hình danh mục + đơn hàng + bàn giao thủ công trong bản này. Muốn tự động giao mã, kích hoạt tool, cấp OTP/proxy hoặc chạy game real-time cần thông tin API/nhà cung cấp, quy tắc giá và quy trình hoàn tiền tương ứng. Không giả lập dữ liệu nhà cung cấp hoặc trạng thái giao hàng khi chưa có tích hợp thật.
 
-Telegram Bot API không cho bot đặt màu nền tùy ý cho inline keyboard và cũng không cho di chuyển nút Menu hệ thống của Telegram sang bên phải. Màu nút được thiết kế trong Mini App; menu điều hướng tùy chỉnh và nút thao tác trong Dashboard nằm bên phải thanh tiêu đề.
+Telegram Bot API 9.4 hỗ trợ màu semantic cho inline keyboard: primary (xanh dương), success (xanh lá) và danger (đỏ). Màu tùy chỉnh/gradient được triển khai trong Mini App qua thư mục apps/admin-dashboard/styles/. Vị trí nút Menu hệ thống của ứng dụng Telegram vẫn do Telegram client quản lý.
 
 
 ### Ghép đôi
 
 Người dùng mở mục Ghép đôi trong Mini App, chọn Ghép nhanh hoặc Luyện tập để vào hàng chờ. Backend PostgreSQL khóa hàng chờ theo chế độ, ghép hai tài khoản và gửi thông báo Telegram; người dùng có thể rời hàng chờ hoặc kết thúc lượt ghép. Đây là hạ tầng matchmaking cơ bản, chưa phải game real-time hoặc hệ thống giải thưởng.
+
+
+## Menu Telegram theo callback member:*
+
+Menu bot theo đúng thứ tự: MINIGAME LIVE + THUÊ TOOL; MUA LÌ XÌ/CODE; NẠP TIỀN + OTP & PROXY; VIP KHO CÔNG CỤ; TRUNG TÂM KHÁCH HÀNG; GHÉP ĐỐI ĐẦU; REF + TRUNG TÂM VIP; NHÓM CHAT + KÊNH THÔNG BÁO; GIFTCODE + CSKH. Các luồng thành viên xử lý trực tiếp trong bot bằng callback `member:*`.
+
+Bảng điều khiển chỉ hiển thị khi Telegram ID khớp `ADMIN_ID`, và mở Mini App theo `MINI_APP_URL?section=admin`. Nếu không khai báo `MINI_APP_URL`, bot fallback sang `WEBAPP_URL` hoặc `RENDER_EXTERNAL_URL`.
+
+### Thư mục màu nút
+
+- `apps/backend-api/src/ui/buttonTheme.js`: màu inline button Telegram. Dùng `primary` (xanh dương), `success` (xanh lá), `danger` (đỏ).
+- `apps/admin-dashboard/styles/buttons.css`: bảng màu tập trung cho các nút Mini App. Chỉnh các biến `--btn-*` tại `:root`.
+- Build kiểm tra JavaScript inline, xác thực CSS theme và copy thư mục `styles/` vào `dist/styles/`.
+
+Tệp `.env.example` chỉ chứa placeholder. Nếu credential cũ đã từng commit, cần thu hồi Bot Token, thay mật khẩu PostgreSQL và tạo lại webhook secret; chỉnh sửa file mới không tự xóa lịch sử Git.

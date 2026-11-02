@@ -184,6 +184,15 @@ async function initDb() {
       details JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS linked_accounts (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+      brand TEXT NOT NULL,
+      username TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, brand, username)
+    );
+    CREATE INDEX IF NOT EXISTS idx_linked_accounts_user ON linked_accounts(user_id, created_at DESC);
     CREATE TABLE IF NOT EXISTS matchmaking_matches (
       id BIGSERIAL PRIMARY KEY,
       player_one TEXT NOT NULL,
