@@ -4,7 +4,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 const express = require('express');
 const http = require('http');
 const { timingSafeEqual } = require('crypto');
-const { Telegraf } = require('telegraf');
+const { Bot, webhookCallback } = require('grammy');
 const { WebSocketServer, WebSocket } = require('ws');
 
 const {
@@ -16,33 +16,62 @@ const {
 } = require('./database');
 const { setupBotClient } = require('./botClient');
 const { setupBotAdmin } = require('./botAdmin');
+const { validateTelegramInitData } = require('./telegramAuth');
 const apiRouter = require('./api');
 
 const PORT = Number(process.env.PORT || 8000);
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ADMIN_ID = String(process.env.ADMIN_ID || '');
+const BOT_SECOND_TOKEN = process.env.BOT_SECOND_TOKEN || '';
+const BOT_SECOND_ADMIN_ID = String(process.env.BOT_SECOND_ADMIN_ID || ADMIN_ID);
 const RENDER_EXTERNAL_URL = (process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
+const SECOND_WEBHOOK_SECRET = process.env.TELEGRAM_SECOND_WEBHOOK_SECRET || '';
 const BANK_WEBHOOK_SECRET = process.env.BANK_WEBHOOK_SECRET || '';
 
-if (!BOT_TOKEN || !/^\d+:.+$/.test(BOT_TOKEN)) {
-  throw new Error('BOT_TOKEN chưa được cấu hình hoặc không đúng định dạng.');
+function validateBotConfig(config) {
+  if (!config.token || !/^\d+:.+$/.test(config.token)) {
+    throw new Error('Token Telegram của bot ' + config.key + ' chưa cấu hình hoặc sai định dạng.');
+  }
+  if (!/^\d{5,20}$/.test(config.adminId)) {
+    throw new Error('ADMIN_ID của bot ' + config.key + ' phải là Telegram user ID dạng số.');
+  }
+  if (RENDER_EXTERNAL_URL && !config.webhookSecret) {
+    throw new Error('Thiếu webhook secret cho bot ' + config.key + ' trên Render.');
+  }
+  if (config.webhookSecret && !/^[A-Za-z0-9_-]{1,256}$/.test(config.webhookSecret)) {
+    throw new Error('Webhook secret của bot ' + config.key + ' không hợp lệ.');
+  }
 }
-if (!/^\d{5,20}$/.test(ADMIN_ID)) {
-  throw new Error('ADMIN_ID phải là Telegram user ID dạng số.');
+
+const botConfigs = [{
+  key:'primary', token:BOT_TOKEN, adminId:ADMIN_ID,
+  webhookSecret:WEBHOOK_SECRET, webhookPath:'/webhook/telegram'
+}];
+if (BOT_SECOND_TOKEN) {
+  botConfigs.push({
+    key:'secondary', token:BOT_SECOND_TOKEN, adminId:BOT_SECOND_ADMIN_ID,
+    webhookSecret:SECOND_WEBHOOK_SECRET, webhookPath:'/webhook/telegram/secondary'
+  });
 }
-if (RENDER_EXTERNAL_URL && !WEBHOOK_SECRET) {
-  throw new Error('TELEGRAM_WEBHOOK_SECRET là bắt buộc khi chạy webhook trên Render.');
+if (new Set(botConfigs.map(item=>item.token)).size !== botConfigs.length) {
+  throw new Error('BOT_TOKEN và BOT_SECOND_TOKEN phải là hai token khác nhau.');
 }
-if (WEBHOOK_SECRET && !/^[A-Za-z0-9_-]{1,256}$/.test(WEBHOOK_SECRET)) {
-  throw new Error('TELEGRAM_WEBHOOK_SECRET chỉ được chứa chữ, số, _ hoặc - và tối đa 256 ký tự.');
-}
+botConfigs.forEach(validateBotConfig);
 
 const app = express();
 const server = http.createServer(app);
-const bot = new Telegraf(BOT_TOKEN);
+const botInstances = botConfigs.map(config => {
+  const bot = new Bot(config.token);
+  bot.catch(error => console.error('[grammY:'+config.key+'] Lỗi xử lý update:',error.message));
+  setupBotClient(bot,{botKey:config.key,adminId:config.adminId});
+  setupBotAdmin(bot,{adminId:config.adminId});
+  return {...config,bot,status:RENDER_EXTERNAL_URL?'webhook-starting':'polling-starting'};
+});
+const bots = Object.fromEntries(botInstances.map(item=>[item.key,item.bot]));
+const primaryBot = bots.primary;
 
-const webAppUrl = process.env.WEBAPP_URL || RENDER_EXTERNAL_URL;
+const webAppUrl = process.env.WEBAPP_URL || process.env.MINI_APP_URL || RENDER_EXTERNAL_URL;
 const dashboardDist = path.resolve(__dirname, '../../admin-dashboard/dist');
 const dashboardIndex = path.join(dashboardDist, 'index.html');
 
@@ -91,15 +120,9 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '256kb' }));
-app.locals.bot = bot;
+app.locals.bots = bots;
+app.locals.primaryBot = primaryBot;
 app.use(apiRouter);
-
-bot.catch((error) => {
-  console.error('Lỗi xử lý Telegram update:', error.message);
-});
-
-setupBotClient(bot);
-setupBotAdmin(bot);
 
 app.get('/healthz', async (req, res) => {
   try {
@@ -159,7 +182,7 @@ app.post('/webhook/bank', async (req, res) => {
       const user = await getUser(userId);
       const formattedAmount = new Intl.NumberFormat('vi-VN').format(amount);
       const formattedBalance = new Intl.NumberFormat('vi-VN').format(Number(user.balance));
-      await bot.telegram.sendMessage(
+      await primaryBot.api.sendMessage(
         userId,
         '🎉 NẠP TIỀN THÀNH CÔNG!\n' +
         'Số tiền nhận: +' + formattedAmount + ' VNĐ\n' +
@@ -177,48 +200,81 @@ app.post('/webhook/bank', async (req, res) => {
   }
 });
 
-app.post(
-  '/webhook/telegram',
-  (req, res, next) => {
-    if (!WEBHOOK_SECRET) return next();
-    const received = req.get('x-telegram-bot-api-secret-token') || '';
-    if (!safeEqual(received, WEBHOOK_SECRET)) {
-      return res.status(401).send('Unauthorized');
-    }
-    next();
-  },
-  bot.webhookCallback('/webhook/telegram')
-);
+for (const config of botInstances) {
+  app.post(
+    config.webhookPath,
+    (req,res,next) => {
+      if (!config.webhookSecret) return next();
+      const received=req.get('x-telegram-bot-api-secret-token')||'';
+      if (!safeEqual(received,config.webhookSecret)) return res.status(401).send('Unauthorized');
+      next();
+    },
+    webhookCallback(config.bot,'express')
+  );
+}
 
-const wss = new WebSocketServer({
-  server,
-  path: '/ws',
-  maxPayload: 16 * 1024
-});
 
-wss.on('connection', (socket, request) => {
-  const origin = request.headers.origin;
-  if (origin && !originAllowed(origin)) {
-    socket.close(1008, 'Origin không được phép');
+const wss = new WebSocketServer({server,path:'/ws',maxPayload:16*1024});
+const adminSockets=new Set();
+function sendSocket(socket,payload) {
+  if(socket.readyState===WebSocket.OPEN) socket.send(JSON.stringify(payload));
+}
+function broadcastAdmin(type,payload={}) {
+  const message={type,payload,timestamp:new Date().toISOString()};
+  for(const socket of adminSockets) sendSocket(socket,message);
+}
+function runtimeSnapshot() {
+  return {
+    bots:botInstances.map(item=>({
+      key:item.key,status:item.status,
+      configured:true,
+      username:item.bot.botInfo && item.bot.botInfo.username || null
+    })),
+    timestamp:new Date().toISOString()
+  };
+}
+app.locals.broadcastAdmin=broadcastAdmin;
+app.locals.runtimeSnapshot=runtimeSnapshot;
+
+wss.on('connection',(socket,request)=>{
+  const origin=request.headers.origin;
+  if(origin && !originAllowed(origin)) {
+    socket.close(1008,'Origin không được phép');
     return;
   }
+  socket.isAdmin=false;
+  socket.send(JSON.stringify({type:'connected',message:'Kênh realtime đã kết nối. Đang chờ xác thực Admin.'}));
+  socket.on('message',async raw=>{
+    let message;
+    try { message=JSON.parse(String(raw)); }
+    catch { socket.close(1003,'Dữ liệu WebSocket không hợp lệ'); return; }
 
-  socket.send(JSON.stringify({
-    type: 'connected',
-    message: 'Đã kết nối bảng điều khiển.',
-    timestamp: new Date().toISOString()
-  }));
-
-  // WebSocket dashboard chỉ nhận sự kiện trạng thái; không broadcast dữ liệu tùy ý từ client.
-  socket.on('message', () => {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: 'info',
-        message: 'Kênh này chỉ dùng để nhận trạng thái từ máy chủ.'
-      }));
+    if(message.type==='authenticate' && !socket.isAdmin) {
+      const botKey=message.botKey==='secondary'?'secondary':'primary';
+      const config=botInstances.find(item=>item.key===botKey);
+      if(!config) { socket.close(1008,'Bot không hợp lệ'); return; }
+      try {
+        const user=validateTelegramInitData(String(message.initData||''),config.token);
+        if(String(user.id)!==String(config.adminId)) { socket.close(1008,'Không có quyền Admin'); return; }
+        socket.isAdmin=true;
+        socket.botKey=botKey;
+        socket.adminId=String(user.id);
+        adminSockets.add(socket);
+        sendSocket(socket,{type:'authenticated',botKey,adminId:socket.adminId});
+        sendSocket(socket,{type:'runtime.snapshot',payload:runtimeSnapshot()});
+      } catch {
+        socket.close(1008,'Xác thực Admin thất bại');
+      }
+      return;
     }
+    if(!socket.isAdmin) { socket.close(1008,'Cần xác thực Admin trước'); return; }
+    if(message.type==='ping') sendSocket(socket,{type:'pong',timestamp:new Date().toISOString()});
   });
+  socket.on('close',()=>adminSockets.delete(socket));
+  socket.on('error',()=>adminSockets.delete(socket));
 });
+
+const realtimeInterval=setInterval(()=>broadcastAdmin('runtime.heartbeat',runtimeSnapshot()),30000);
 
 app.use(express.static(dashboardDist, {
   index: false,
@@ -251,29 +307,30 @@ app.use((error, req, res, next) => {
 
 async function start() {
   await initDb();
-
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(PORT, '0.0.0.0', () => {
-      server.removeListener('error', reject);
-      resolve();
-    });
+  await Promise.all(botInstances.map(item=>item.bot.init()));
+  await new Promise((resolve,reject)=>{
+    server.once('error',reject);
+    server.listen(PORT,'0.0.0.0',()=>{server.removeListener('error',reject);resolve();});
   });
-
-  console.log('Express đang lắng nghe tại cổng ' + PORT);
-
-  if (RENDER_EXTERNAL_URL) {
-    const webhookUrl = RENDER_EXTERNAL_URL + '/webhook/telegram';
-    const options = WEBHOOK_SECRET ? { secret_token: WEBHOOK_SECRET } : {};
-    await bot.telegram.setWebhook(webhookUrl, options);
-    console.log('Telegram webhook đã được thiết lập.');
+  console.log('Express đang lắng nghe tại cổng '+PORT);
+  if(RENDER_EXTERNAL_URL) {
+    for(const item of botInstances) {
+      await item.bot.api.setWebhook(RENDER_EXTERNAL_URL+item.webhookPath,{secret_token:item.webhookSecret});
+      item.status='webhook';
+      console.log('Webhook grammY đã thiết lập cho bot '+item.key+'.');
+    }
   } else {
-    bot.launch().catch((error) => {
-      console.error('Không thể khởi chạy Telegram polling:', error.message);
-      process.exitCode = 1;
-    });
-    console.log('Telegram bot chạy bằng long polling.');
+    for(const item of botInstances) {
+      item.status='polling';
+      item.bot.start().catch(error=>{
+        item.status='error';
+        console.error('Không thể khởi chạy grammY polling cho '+item.key+':',error.message);
+        broadcastAdmin('bot.status',runtimeSnapshot());
+      });
+    }
+    console.log('Đang chạy '+botInstances.length+' bot bằng long polling.');
   }
+  broadcastAdmin('runtime.snapshot',runtimeSnapshot());
 }
 
 let isShuttingDown = false;
@@ -282,9 +339,12 @@ async function shutdown(signal) {
   isShuttingDown = true;
   console.log('Đang tắt dịch vụ (' + signal + ')...');
 
+  clearInterval(realtimeInterval);
   if (!RENDER_EXTERNAL_URL) {
-    try { bot.stop(signal); } catch (error) {
-      console.error('Lỗi dừng Telegram polling:', error.message);
+    for(const item of botInstances) {
+      try { item.bot.stop(); } catch(error) {
+        console.error('Lỗi dừng grammY polling ('+item.key+'):',error.message);
+      }
     }
   }
 
