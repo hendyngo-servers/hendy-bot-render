@@ -757,10 +757,6 @@
     } catch (error) { toast(error.message); }
   });
 
-  $('bottom-navigation').addEventListener('click',event=>{
-    const button = event.target.closest('[data-page]');
-    if(button) navigate(button.dataset.page);
-  });
   $('menu-button').addEventListener('click',()=>{
     if (tg && tg.showPopup) {
       tg.showPopup({

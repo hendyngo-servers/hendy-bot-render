@@ -142,3 +142,8 @@ Mini App chỉ chấp nhận Telegram Web App `initData` đã được xác th�
 Các sản phẩm OTP/Proxy, công cụ cho thuê và Mini Game được vận hành theo mô hình danh mục + đơn hàng + bàn giao thủ công trong bản này. Muốn tự động giao mã, kích hoạt tool, cấp OTP/proxy hoặc chạy game real-time cần thông tin API/nhà cung cấp, quy tắc giá và quy trình hoàn tiền tương ứng. Không giả lập dữ liệu nhà cung cấp hoặc trạng thái giao hàng khi chưa có tích hợp thật.
 
 Telegram Bot API không cho bot đặt màu nền tùy ý cho inline keyboard và cũng không cho di chuyển nút Menu hệ thống của Telegram sang bên phải. Màu nút được thiết kế trong Mini App; menu điều hướng tùy chỉnh và nút thao tác trong Dashboard nằm bên phải thanh tiêu đề.
+
+
+### Ghép đôi
+
+Người dùng mở mục Ghép đôi trong Mini App, chọn Ghép nhanh hoặc Luyện tập để vào hàng chờ. Backend PostgreSQL khóa hàng chờ theo chế độ, ghép hai tài khoản và gửi thông báo Telegram; người dùng có thể rời hàng chờ hoặc kết thúc lượt ghép. Đây là hạ tầng matchmaking cơ bản, chưa phải game real-time hoặc hệ thống giải thưởng.
