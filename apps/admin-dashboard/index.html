@@ -436,22 +436,31 @@
 
   function adminProducts() {
     const products = state.adminData.products || [];
-    return '<form class="card form" id="admin-product-form"><b>Thêm sản phẩm mới</b><div class="field"><label>Tên sản phẩm</label><input name="name" maxlength="120" required></div>' +
+    const editing = state.editingProductId
+      ? products.find(item => item.id === state.editingProductId)
+      : null;
+    const value = (key, fallback) => editing && editing[key] != null ? escapeHtml(editing[key]) : fallback;
+    const selected = key => editing && editing.category === key ? ' selected' : '';
+    return '<form class="card form" id="admin-product-form" data-product-id="' + (editing ? escapeHtml(editing.id) : '') + '"><b>' +
+      (editing ? 'Chỉnh sửa sản phẩm #' + escapeHtml(editing.id) : 'Thêm sản phẩm mới') + '</b>' +
+      '<div class="field"><label>Tên sản phẩm</label><input name="name" maxlength="120" value="' + value('name','') + '" required></div>' +
       '<div class="two-col"><div class="field"><label>Danh mục</label><select name="category">' +
-      Object.keys(labels).map(key => '<option value="' + key + '">' + labels[key] + '</option>').join('') + '</select></div>' +
-      '<div class="field"><label>Giá (VNĐ)</label><input name="price" type="number" min="0" step="1" required></div></div>' +
-      '<div class="field"><label>Mô tả</label><textarea name="description" maxlength="1500"></textarea></div>' +
-      '<div class="two-col"><div class="field"><label>Thời hạn (ngày)</label><input name="durationDays" type="number" min="0" value="0"></div>' +
-      '<div class="field"><label>Tồn kho (để trống = không giới hạn)</label><input name="stock" type="number" min="0"></div></div>' +
-      '<div class="two-col"><div class="field"><label>Cấp VIP khi hoàn tất (0-3)</label><input name="vipLevel" type="number" min="0" max="3" value="0"></div>' +
-      '<div class="field"><label>URL ảnh HTTPS</label><input name="imageUrl" type="url" placeholder="https://..."></div></div>' +
-      '<button class="primary">＋ Tạo sản phẩm</button></form>' +
+      Object.keys(labels).map(key => '<option value="' + key + '"' + selected(key) + '>' + escapeHtml(labels[key]) + '</option>').join('') + '</select></div>' +
+      '<div class="field"><label>Giá (VNĐ)</label><input name="price" type="number" min="0" step="1" value="' + value('price','') + '" required></div></div>' +
+      '<div class="field"><label>Mô tả</label><textarea name="description" maxlength="1500">' + value('description','') + '</textarea></div>' +
+      '<div class="two-col"><div class="field"><label>Thời hạn (ngày)</label><input name="durationDays" type="number" min="0" value="' + value('durationDays',0) + '"></div>' +
+      '<div class="field"><label>Tồn kho (để trống = không giới hạn)</label><input name="stock" type="number" min="0" value="' + (editing && editing.stock != null ? escapeHtml(editing.stock) : '') + '"></div></div>' +
+      '<div class="two-col"><div class="field"><label>Cấp VIP khi hoàn tất (0-3)</label><input name="vipLevel" type="number" min="0" max="3" value="' + value('vipLevel',0) + '"></div>' +
+      '<div class="field"><label>URL ảnh HTTPS</label><input name="imageUrl" type="url" placeholder="https://..." value="' + value('imageUrl','') + '"></div></div>' +
+      '<div class="two-col"><button class="primary">' + (editing ? 'Lưu thay đổi' : '＋ Tạo sản phẩm') + '</button>' +
+      (editing ? '<button type="button" class="secondary" data-cancel-product-edit>Hủy chỉnh sửa</button>' : '') + '</div></form>' +
       '<div class="section-head"><h3>Danh sách sản phẩm</h3><span>' + products.length + ' sản phẩm</span></div>' +
       (products.length ? products.map(product =>
         '<article class="record"><div class="record-top"><div><b>' + escapeHtml(product.name) + '</b><small class="muted">#' + product.id + ' · ' + escapeHtml(labels[product.category] || product.category) + '</small></div>' +
-        '<span class="status ' + (product.is_active ? 'completed' : 'cancelled') + '">' + (product.is_active ? 'Đang bán' : 'Đã ẩn') + '</span></div>' +
-        '<p>' + money(product.price) + ' · Kho: ' + (product.stock == null ? 'Không giới hạn' : product.stock) + '</p>' +
-        '<button class="tiny-btn" data-disable-product="' + product.id + '">' + (product.is_active ? 'Tạm ngừng bán' : 'Đã ngừng') + '</button></article>'
+        '<span class="status ' + (product.isActive ? 'completed' : 'cancelled') + '">' + (product.isActive ? 'Đang bán' : 'Đã ẩn') + '</span></div>' +
+        '<p>' + money(product.price) + ' · Kho: ' + (product.stock == null ? 'Không giới hạn' : product.stock) + (product.durationDays ? ' · ' + product.durationDays + ' ngày' : '') + '</p>' +
+        '<div class="two-col"><button class="tiny-btn" data-edit-product="' + escapeHtml(product.id) + '">Chỉnh sửa</button>' +
+        '<button class="tiny-btn" data-toggle-product="' + escapeHtml(product.id) + '" data-active="' + String(Boolean(product.isActive)) + '">' + (product.isActive ? 'Tạm ngừng bán' : 'Mở bán lại') + '</button></div></article>'
       ).join('') : empty('Chưa có sản phẩm','Hãy tạo sản phẩm thật và nhập giá, tồn kho, thời hạn trước khi mở bán.'));
   }
 
@@ -502,7 +511,10 @@
       '<div class="field"><label>Số lượt tối đa</label><input name="maxRedemptions" type="number" min="1" value="1" required></div></div>' +
       '<div class="field"><label>Hết hạn (không bắt buộc)</label><input name="expiresAt" type="datetime-local"></div><button class="primary">Tạo mã</button></form>' +
       (codes.length ? codes.map(code =>
-        '<div class="list-row"><div><b>' + escapeHtml(code.code) + '</b><small>Thưởng ' + money(code.reward_amount) + ' · Đã dùng ' + code.redeemed_count + '/' + code.max_redemptions + '</small></div><span class="status ' + (code.is_active ? 'completed' : 'cancelled') + '">' + (code.is_active ? 'Hoạt động' : 'Đã khóa') + '</span></div>'
+        '<div class="list-row"><div><b>' + escapeHtml(code.code) + '</b><small>Thưởng ' + money(code.reward_amount) + ' · Đã dùng ' + code.redeemed_count + '/' + code.max_redemptions +
+        (code.expires_at ? ' · Hết hạn ' + new Date(code.expires_at).toLocaleString('vi-VN') : '') + '</small></div>' +
+        '<div style="text-align:right"><span class="status ' + (code.is_active ? 'completed' : 'cancelled') + '">' + (code.is_active ? 'Hoạt động' : 'Đã khóa') + '</span>' +
+        '<div style="margin-top:7px"><button class="tiny-btn" data-toggle-giftcode="' + escapeHtml(code.code) + '" data-active="' + String(Boolean(code.is_active)) + '">' + (code.is_active ? 'Khóa mã' : 'Mở mã') + '</button></div></div></div>'
       ).join('') : empty('Chưa có giftcode','Tạo giftcode và đặt hạn sử dụng trước khi chia sẻ.'));
   }
 
@@ -641,14 +653,42 @@
       } catch (error) { toast('Không thể sao chép trên thiết bị này.'); }
       return;
     }
-    const disable = event.target.closest('[data-disable-product]');
-    if (disable) {
-      if (!window.confirm('Ngừng bán sản phẩm này?')) return;
+    const cancelEdit = event.target.closest('[data-cancel-product-edit]');
+    if (cancelEdit) {
+      state.editingProductId = null;
+      await renderPage();
+      return;
+    }
+    const editProduct = event.target.closest('[data-edit-product]');
+    if (editProduct) {
+      state.editingProductId = editProduct.dataset.editProduct;
+      await renderPage();
+      window.scrollTo({top:0,behavior:'smooth'});
+      return;
+    }
+    const toggleProduct = event.target.closest('[data-toggle-product]');
+    if (toggleProduct) {
+      const nextActive = toggleProduct.dataset.active !== 'true';
+      const action = nextActive ? 'Mở bán lại sản phẩm này?' : 'Tạm ngừng bán sản phẩm này?';
+      if (!window.confirm(action)) return;
       try {
-        await api('/api/admin/products/' + disable.dataset.disableProduct,'DELETE');
-        toast('Đã ngừng bán sản phẩm.');
+        await api('/api/admin/products/' + toggleProduct.dataset.toggleProduct,'PATCH',{isActive:nextActive});
+        state.editingProductId = null;
+        toast(nextActive ? 'Đã mở bán sản phẩm.' : 'Đã tạm ngừng bán sản phẩm.');
         await renderPage();
       } catch (error) { toast(error.message); }
+      return;
+    }
+    const toggleGiftcode = event.target.closest('[data-toggle-giftcode]');
+    if (toggleGiftcode) {
+      const nextActive = toggleGiftcode.dataset.active !== 'true';
+      if (!window.confirm(nextActive ? 'Mở lại giftcode này?' : 'Khóa giftcode này?')) return;
+      try {
+        await api('/api/admin/giftcodes/' + encodeURIComponent(toggleGiftcode.dataset.toggleGiftcode),'PATCH',{isActive:nextActive});
+        toast(nextActive ? 'Đã mở giftcode.' : 'Đã khóa giftcode.');
+        await renderPage();
+      } catch (error) { toast(error.message); }
+      return;
     }
   });
 
@@ -674,8 +714,15 @@
         data.durationDays = Number(data.durationDays || 0);
         data.vipLevel = Number(data.vipLevel || 0);
         if (data.stock === '') data.stock = null; else if (data.stock !== null) data.stock = Number(data.stock);
-        await api('/api/admin/products','POST',data);
-        toast('Đã tạo sản phẩm.');
+        const productId = form.dataset.productId;
+        if (productId) {
+          await api('/api/admin/products/' + productId,'PATCH',data);
+          toast('Đã cập nhật sản phẩm.');
+        } else {
+          await api('/api/admin/products','POST',data);
+          toast('Đã tạo sản phẩm.');
+        }
+        state.editingProductId = null;
         await renderPage();
       } else if (form.id === 'admin-settings-form') {
         delete data.undefined;
