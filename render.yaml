@@ -25,6 +25,8 @@ services:
         sync: false
       - key: BOT_SECOND_ADMIN_ID
         sync: false
+      - key: BOT_SECOND_USERNAME
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_SSL

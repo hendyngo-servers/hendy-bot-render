@@ -44,7 +44,7 @@ Reply Keyboard gửi text về chat; bot ánh xạ text nút sang action đã c�
 
 Bot chính luôn bật bằng BOT_TOKEN và ADMIN_ID.
 
-Bot thứ hai tùy chọn bằng BOT_SECOND_TOKEN. BOT_SECOND_ADMIN_ID có thể dùng Admin riêng; nếu bỏ trống sẽ dùng ADMIN_ID.
+Bot thứ hai tùy chọn bằng BOT_SECOND_TOKEN. BOT_SECOND_ADMIN_ID có thể dùng Admin riêng; nếu bỏ trống sẽ dùng ADMIN_ID. BOT_SECOND_USERNAME là fallback username nếu API getMe không truy cập được.
 
 Trên Render, bot chính nhận webhook /webhook/telegram, bot thứ hai nhận /webhook/telegram/secondary. Mỗi bot có webhook secret riêng. Khi local không có RENDER_EXTERNAL_URL, các bot dùng long polling.
 
