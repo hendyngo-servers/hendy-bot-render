@@ -176,6 +176,19 @@ async function initDb() {
       is_public BOOLEAN NOT NULL DEFAULT TRUE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS bot_menu_configs (
+      bot_key TEXT PRIMARY KEY CHECK (bot_key IN ('primary','secondary')),
+      menu_mode TEXT NOT NULL DEFAULT 'reply_keyboard'
+        CHECK (menu_mode IN ('reply_keyboard','inline_keyboard')),
+      intro_text TEXT NOT NULL DEFAULT '',
+      menu_columns SMALLINT NOT NULL DEFAULT 2 CHECK (menu_columns BETWEEN 1 AND 3),
+      persistent_keyboard BOOLEAN NOT NULL DEFAULT TRUE,
+      resize_keyboard BOOLEAN NOT NULL DEFAULT TRUE,
+      button_labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+      button_descriptions JSONB NOT NULL DEFAULT '{}'::jsonb,
+      button_styles JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS admin_audit (
       id BIGSERIAL PRIMARY KEY,
       admin_user_id TEXT NOT NULL,
@@ -234,6 +247,14 @@ async function initDb() {
       ('referral_commission_percent', '0', TRUE),
       ('support_message', 'Đội ngũ CSKH sẽ phản hồi trong thời gian sớm nhất.', TRUE)
     ON CONFLICT (key) DO NOTHING
+  `);
+
+  await pool.query(`
+    INSERT INTO bot_menu_configs (bot_key,menu_mode,intro_text,menu_columns,persistent_keyboard,resize_keyboard)
+    VALUES
+      ('primary','reply_keyboard','Chào mừng bạn đến với HENDY BOT. Chọn dịch vụ ở bàn phím phía dưới để bắt đầu.',2,TRUE,TRUE),
+      ('secondary','inline_keyboard','Chào mừng bạn đến với HENDY BOT. Chọn một chức năng để tiếp tục.',2,TRUE,TRUE)
+    ON CONFLICT (bot_key) DO NOTHING
   `);
 
   console.log('Đã khởi tạo PostgreSQL schema.');
