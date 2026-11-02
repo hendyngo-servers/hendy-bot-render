@@ -102,6 +102,108 @@ async function initDb() {
     ALTER TABLE users ALTER COLUMN total_deposited SET NOT NULL;
   `);
 
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS products (
+      id BIGSERIAL PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL CHECK (category IN ('minigame','tools','codes','otp','proxy','vip')),
+      description TEXT NOT NULL DEFAULT '',
+      price NUMERIC(18, 0) NOT NULL CHECK (price >= 0),
+      duration_days INTEGER NOT NULL DEFAULT 0,
+      stock INTEGER,
+      vip_level INTEGER NOT NULL DEFAULT 0,
+      image_url TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS orders (
+      id BIGSERIAL PRIMARY KEY,
+      order_code TEXT NOT NULL UNIQUE,
+      user_id TEXT NOT NULL,
+      product_id BIGINT REFERENCES products(id) ON DELETE SET NULL,
+      product_name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount NUMERIC(18, 0) NOT NULL CHECK (amount >= 0),
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_note TEXT NOT NULL DEFAULT '',
+      delivery_text TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS wallet_ledger (
+      id BIGSERIAL PRIMARY KEY,
+      reference_code TEXT UNIQUE,
+      user_id TEXT NOT NULL,
+      amount NUMERIC(18, 0) NOT NULL,
+      transaction_type TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      priority TEXT NOT NULL DEFAULT 'normal',
+      admin_reply TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS giftcodes (
+      code TEXT PRIMARY KEY,
+      reward_amount NUMERIC(18, 0) NOT NULL DEFAULT 0 CHECK (reward_amount >= 0),
+      max_redemptions INTEGER NOT NULL DEFAULT 1 CHECK (max_redemptions > 0),
+      redeemed_count INTEGER NOT NULL DEFAULT 0,
+      expires_at TIMESTAMPTZ,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS giftcode_redemptions (
+      code TEXT NOT NULL REFERENCES giftcodes(code) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      reward_amount NUMERIC(18, 0) NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (code, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      is_public BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS admin_audit (
+      id BIGSERIAL PRIMARY KEY,
+      admin_user_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target TEXT NOT NULL DEFAULT '',
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_products_category_active ON products(category, is_active);
+    CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders(status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_wallet_user_created ON wallet_ledger(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_tickets_user_created ON support_tickets(user_id, created_at DESC);
+  `);
+  await pool.query(`
+    INSERT INTO app_settings (key, value, is_public) VALUES
+      ('homepage_title', 'Hendy Bot', TRUE),
+      ('announcement', '', TRUE),
+      ('VIETQR_BANK_ID', '', TRUE),
+      ('VIETQR_ACCOUNT_NO', '', TRUE),
+      ('VIETQR_ACCOUNT_NAME', '', TRUE),
+      ('GROUP_URL', '', TRUE),
+      ('CHANNEL_URL', '', TRUE),
+      ('referral_commission_percent', '0', TRUE),
+      ('support_message', 'Đội ngũ CSKH sẽ phản hồi trong thời gian sớm nhất.', TRUE)
+    ON CONFLICT (key) DO NOTHING
+  `);
+
   console.log('Đã khởi tạo PostgreSQL schema.');
 }
 
@@ -224,6 +326,11 @@ async function processDeposit({ userId, amount, referenceCode }) {
        VALUES ($1, $2, 'DEPOSIT', $3, 'paid')`,
       [String(userId), value, reference]
     );
+    await client.query(
+      `INSERT INTO wallet_ledger (reference_code, user_id, amount, transaction_type, description)
+       VALUES ($1, $2, $3, 'DEPOSIT', 'Nạp tiền qua ngân hàng')`,
+      ['deposit:' + reference, String(userId), value]
+    );
 
     await client.query('COMMIT');
     return { duplicate: false, user: updated.rows[0] };
@@ -251,5 +358,6 @@ module.exports = {
   logTransaction,
   processDeposit,
   checkDb,
-  closeDb
+  closeDb,
+  pool
 };

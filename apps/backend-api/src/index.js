@@ -16,6 +16,7 @@ const {
 } = require('./database');
 const { setupBotClient } = require('./botClient');
 const { setupBotAdmin } = require('./botAdmin');
+const apiRouter = require('./api');
 
 const PORT = Number(process.env.PORT || 8000);
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -90,6 +91,12 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '256kb' }));
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-telegram-init-data, x-bank-webhook-secret, x-telegram-bot-api-secret-token');
+  next();
+});
+app.locals.bot = bot;
+app.use(apiRouter);
 
 bot.catch((error) => {
   console.error('Lỗi xử lý Telegram update:', error.message);
