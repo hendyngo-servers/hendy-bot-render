@@ -417,7 +417,7 @@ router.get('/api/admin/users', asyncRoute(async (req, res) => {
   const search = cleanText(req.query.search, 80);
   const result = await pool.query(
     'SELECT user_id,name,username,balance,total_deposited,vip_level,ref_by,created_at FROM users ' +
-    'WHERE ($1 = \\'\\' OR user_id ILIKE $2 OR name ILIKE $2 OR username ILIKE $2) ORDER BY created_at DESC LIMIT 100',
+    "WHERE ($1 = '' OR user_id ILIKE $2 OR name ILIKE $2 OR username ILIKE $2) ORDER BY created_at DESC LIMIT 100",
     [search, '%' + search + '%']
   );
   res.json({ users: result.rows.map(row => ({ ...row, balance: Number(row.balance), total_deposited: Number(row.total_deposited) })) });
@@ -441,11 +441,11 @@ router.post('/api/admin/users/:id/adjust-balance', asyncRoute(async (req, res) =
     if (!updated.rowCount) throw httpError(409, 'Không tìm thấy tài khoản hoặc số dư không đủ.');
     const ref = 'admin:' + crypto.randomBytes(12).toString('hex');
     await client.query(
-      'INSERT INTO wallet_ledger (reference_code,user_id,amount,transaction_type,description) VALUES ($1,$2,$3,\\'ADMIN_ADJUSTMENT\\',$4)',
+      "INSERT INTO wallet_ledger (reference_code,user_id,amount,transaction_type,description) VALUES ($1,$2,$3,'ADMIN_ADJUSTMENT',$4)",
       [ref,userId,signed,description || 'Điều chỉnh số dư bởi quản trị viên']
     );
     await client.query(
-      'INSERT INTO transactions (user_id,amount,type,reference_code,status) VALUES ($1,$2,\\'ADMIN_ADJUSTMENT\\',$3,\\'paid\\')',
+      "INSERT INTO transactions (user_id,amount,type,reference_code,status) VALUES ($1,$2,'ADMIN_ADJUSTMENT',$3,'paid')",
       [userId,amount,ref]
     );
     await client.query('COMMIT');
