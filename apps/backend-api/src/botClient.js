@@ -408,11 +408,11 @@ async function createLegacyLoginUrl(userId,botKey) {
 }
 
 async function showLive(ctx,userId,config,pendingInputs,botKey) {
-  const miniUrl=getMiniAppUrl('customer',botKey);
+  const miniUrl=getMiniAppUrl('accounts',botKey);
   const legacyUrl=await createLegacyLoginUrl(userId,botKey);
   const accounts=await getLinkedAccounts(userId);
   const rows=[];
-  if(miniUrl) rows.push([inlineWebAppButton('🚀 [MINI APP] BẢN MỚI | CHỈ MOBILE',miniUrl,'success')]);
+  if(miniUrl) rows.push([inlineWebAppButton('🚀 [MINI APP] BẢN MỚI · KHUYẾN NGHỊ',miniUrl,'success')]);
   else rows.push([callbackButton('🚀 MINI APP CHƯA CẤU HÌNH','member:admin-unavailable','danger')]);
   if(legacyUrl) rows.push([urlButton('🔑 PHIÊN BẢN WEB CŨ · LINK 5 PHÚT',legacyUrl,'primary')]);
   else rows.push([callbackButton('🔑 PHIÊN BẢN WEB CŨ · CHƯA CẤU HÌNH','member:legacy-unavailable','danger')]);
@@ -423,7 +423,7 @@ async function showLive(ctx,userId,config,pendingInputs,botKey) {
     '🧭 <b>TRUNG TÂM QUẢN LÝ TÀI KHOẢN</b>',
     '━━━━━━━━━━━━━━━━━━━━',
     'Chọn một trong hai cách truy cập bên dưới:',
-    '• <b>Mini App:</b> Trải nghiệm mới, mượt mà hơn (khuyến nghị, chỉ hỗ trợ thiết bị có Telegram Web App).',
+    '• <b>Mini App:</b> Trải nghiệm mới để quản lý/liên kết tài khoản, tối ưu cho Telegram trên điện thoại.',
     '• <b>Đăng nhập truyền thống:</b> Link đăng nhập dùng một lần, có hiệu lực tối đa 5 phút.',
     '',
     'Tài khoản đã liên kết: <b>'+accounts.length+'</b>',
