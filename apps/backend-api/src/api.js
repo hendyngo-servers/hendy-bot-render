@@ -161,6 +161,41 @@ router.get('/api/me', asyncRoute(async (req, res) => {
   res.json({ user: await userRow(req.telegramUser), isAdmin: Boolean(req.isAdmin) });
 }));
 
+router.get('/api/linked-accounts', asyncRoute(async (req,res)=>{
+  const result=await pool.query(
+    'SELECT id,brand,username,created_at FROM linked_accounts WHERE user_id=$1 ORDER BY created_at DESC',
+    [String(req.telegramUser.id)]
+  );
+  res.json({accounts:result.rows});
+}));
+
+router.post('/api/linked-accounts', asyncRoute(async (req,res)=>{
+  const brand=cleanText(req.body && req.body.brand,16).toUpperCase();
+  const username=cleanText(req.body && req.body.username,64);
+  const allowed=['QQ88','78WIN','SC88','C168','CM88','F8BET'];
+  if(!allowed.includes(brand)) throw httpError(400,'Thương hiệu không nằm trong danh sách hỗ trợ.');
+  if(username.length<3 || username.length>64 || /[\u0000-\u001f]/.test(username)) {
+    throw httpError(400,'Tên đăng nhập phải từ 3 đến 64 ký tự.');
+  }
+  const result=await pool.query(
+    'INSERT INTO linked_accounts (user_id,brand,username) VALUES ($1,$2,$3) '+
+    'ON CONFLICT (user_id,brand,username) DO NOTHING RETURNING id,brand,username,created_at',
+    [String(req.telegramUser.id),brand,username]
+  );
+  if(!result.rowCount) throw httpError(409,'Tài khoản này đã được liên kết.');
+  res.status(201).json({account:result.rows[0]});
+}));
+
+router.delete('/api/linked-accounts/:id', asyncRoute(async (req,res)=>{
+  if(!/^\d{1,18}$/.test(String(req.params.id))) throw httpError(400,'ID tài khoản không hợp lệ.');
+  const result=await pool.query(
+    'DELETE FROM linked_accounts WHERE id=$1 AND user_id=$2 RETURNING id',
+    [req.params.id,String(req.telegramUser.id)]
+  );
+  if(!result.rowCount) throw httpError(404,'Không tìm thấy tài khoản liên kết.');
+  res.json({success:true});
+}));
+
 router.get('/api/orders', asyncRoute(async (req, res) => {
   const result = await pool.query(
     "SELECT id, order_code, product_name, category, amount, status, admin_note, " +

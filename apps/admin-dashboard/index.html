@@ -191,7 +191,8 @@
     vip:['Thành viên VIP','Theo dõi cấp thành viên và quyền lợi.'],
     wallet:['Ví điện tử','Nạp tiền và xem biến động số dư.'],
     orders:['Đơn hàng','Theo dõi trạng thái xử lý và thông tin bàn giao.'],
-    customer:['Trung tâm khách hàng','Hồ sơ, lịch sử, giới thiệu và trợ giúp.'],
+    customer:['Trung tâm khách hàng','Hồ sơ, số dư, đơn hàng và hỗ trợ.'],
+    accounts:['Quản lý tài khoản','Liên kết và quản lý tài khoản Mini Game Live.'],
     support:['Chăm sóc khách hàng','Gửi yêu cầu và theo dõi phản hồi từ đội ngũ hỗ trợ.'],
     referrals:['Giới thiệu bạn bè','Chia sẻ liên kết và theo dõi người được giới thiệu.'],
     giftcode:['Giftcode','Nhập mã quà tặng để nhận thưởng vào ví.'],
@@ -339,6 +340,21 @@
     return ({pending:'Chờ xử lý',processing:'Đang xử lý',completed:'Hoàn tất',rejected:'Từ chối',cancelled:'Đã hủy',open:'Mở',resolved:'Đã giải quyết',closed:'Đã đóng'})[status] || status;
   }
 
+  async function renderAccounts() {
+    const data = await api('/api/linked-accounts');
+    const accounts = data.accounts || [];
+    return '<div class="notice">Liên kết tài khoản theo thương hiệu. Chỉ lưu thương hiệu và tên đăng nhập; không nhập mật khẩu hoặc OTP.</div>' +
+      '<form class="card form" id="linked-account-form"><div class="field"><label>Thương hiệu</label><select name="brand">' +
+      ['QQ88','78WIN','SC88','C168','CM88','F8BET'].map(brand => '<option value="' + brand + '">' + brand + '</option>').join('') +
+      '</select></div><div class="field"><label>Tên đăng nhập (Username)</label><input name="username" minlength="3" maxlength="64" required placeholder="Nhập tên tài khoản"></div>' +
+      '<button class="primary">＋ Liên kết tài khoản</button></form>' +
+      '<div class="section-head"><h3>Tài khoản đã liên kết</h3><span>' + accounts.length + ' tài khoản</span></div>' +
+      (accounts.length ? accounts.map(item =>
+        '<article class="record"><div class="record-top"><div><b>' + escapeHtml(item.brand) + '</b><small class="muted">' + escapeHtml(item.username) + '<br>' + new Date(item.created_at).toLocaleString('vi-VN') + '</small></div>' +
+        '<button class="danger" data-delete-linked-account="' + escapeHtml(item.id) + '">Xóa</button></div></article>'
+      ).join('') : empty('Chưa có tài khoản liên kết','Thêm tài khoản đầu tiên bằng biểu mẫu phía trên.'));
+  }
+
   async function renderCustomer() {
     const user = state.boot.user;
     const [wallet, orders, tickets, referrals] = await Promise.all([
@@ -349,7 +365,8 @@
       '<div class="section-head"><h3>Số dư tài khoản</h3><b class="price">' + money(wallet.balance) + '</b></div></section>' +
       '<div class="stat-grid"><div class="stat"><small>Đơn hàng</small><b>' + orders.orders.length + '</b></div><div class="stat"><small>Yêu cầu CSKH</small><b>' + tickets.tickets.length + '</b></div><div class="stat"><small>Bạn bè giới thiệu</small><b>' + referrals.totalInvited + '</b></div><div class="stat"><small>Thưởng giới thiệu</small><b>' + money(referrals.totalReward) + '</b></div></div>' +
       '<div class="section-head"><h3>Tiện ích tài khoản</h3><span>Quản lý cá nhân</span></div>' +
-      '<div class="card"><div class="list-row"><div><b>👛 Ví điện tử</b><small>Nạp tiền và lịch sử giao dịch</small></div><button class="tiny-btn" data-page="wallet">Mở</button></div>' +
+      '<div class="card"><div class="list-row"><div><b>🔗 Quản lý tài khoản</b><small>Liên kết và xóa tài khoản Mini Game Live</small></div><button class="tiny-btn" data-page="accounts">Mở</button></div>' +
+      '<div class="list-row"><div><b>👛 Ví điện tử</b><small>Nạp tiền và lịch sử giao dịch</small></div><button class="tiny-btn" data-page="wallet">Mở</button></div>' +
       '<div class="list-row"><div><b>🧾 Đơn hàng của tôi</b><small>Theo dõi tiến độ xử lý và bàn giao</small></div><button class="tiny-btn" data-page="orders">Mở</button></div>' +
       '<div class="list-row"><div><b>👥 Giới thiệu bạn bè</b><small>Liên kết giới thiệu và thống kê</small></div><button class="tiny-btn" data-page="referrals">Mở</button></div>' +
       '<div class="list-row"><div><b>🎁 Giftcode</b><small>Nhập mã quà tặng</small></div><button class="tiny-btn" data-page="giftcode">Mở</button></div>' +
@@ -596,6 +613,7 @@
       else if (page === 'wallet') html = await renderWallet();
       else if (page === 'orders') html = await renderOrders();
       else if (page === 'customer') html = await renderCustomer();
+      else if (page === 'accounts') html = await renderAccounts();
       else if (page === 'support') html = await renderSupport();
       else if (page === 'referrals') html = await renderReferrals();
       else if (page === 'giftcode') html = renderGiftcode();
@@ -710,6 +728,16 @@
       } catch (error) { toast(error.message); }
       return;
     }
+    const deleteLinked = event.target.closest('[data-delete-linked-account]');
+    if (deleteLinked) {
+      if (!window.confirm('Xóa liên kết tài khoản này?')) return;
+      try {
+        await api('/api/linked-accounts/' + encodeURIComponent(deleteLinked.dataset.deleteLinkedAccount),'DELETE');
+        toast('Đã xóa liên kết tài khoản.');
+        await renderPage();
+      } catch (error) { toast(error.message); }
+      return;
+    }
     const buy = event.target.closest('[data-buy]');
     if (buy) {
       const product = state.boot.products.find(item => item.id === buy.dataset.buy);
@@ -791,6 +819,10 @@
         const amount = Number(data.amount);
         if (!Number.isSafeInteger(amount) || amount < 10000) throw new Error('Số tiền tối thiểu là 10.000 VNĐ.');
         await showQr(amount);
+      } else if (form.id === 'linked-account-form') {
+        await api('/api/linked-accounts','POST',data);
+        toast('Đã liên kết tài khoản.');
+        await renderPage();
       } else if (form.id === 'support-form') {
         await api('/api/support/tickets','POST',data);
         toast('Đã gửi yêu cầu hỗ trợ.');
@@ -900,7 +932,7 @@
       $('brand-name').textContent = state.boot.settings.homepage_title || 'Hendy Bot';
       $('profile-chip').querySelector('.avatar').textContent = (state.boot.user.name || 'H').slice(0,1).toUpperCase();
       const requested = new URLSearchParams(location.search).get('section');
-      const valid = ['home','minigame','tools','codes','otp','proxy','vip','wallet','orders','customer','support','referrals','giftcode','matchmaking','admin'];
+      const valid = ['home','minigame','tools','codes','otp','proxy','vip','wallet','orders','customer','accounts','support','referrals','giftcode','matchmaking','admin'];
       state.page = valid.includes(requested) ? requested : 'home';
       if (state.page === 'admin' && !state.boot.isAdmin) state.page = 'home';
       renderPage();
