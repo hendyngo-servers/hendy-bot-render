@@ -574,8 +574,12 @@ async function dispatchAction(ctx,action,context) {
       pool.query("SELECT COALESCE(SUM(amount),0) AS total FROM wallet_ledger WHERE user_id=$1 AND transaction_type='REFERRAL_REWARD'",[userId]),
       getSettings(['referral_commission_percent'])
     ]);
-    let username=String(process.env.BOT_USERNAME||'').replace(/^@/,'');
+    let username=String(bot.botInfo && bot.botInfo.username || '').replace(/^@/,'');
     if(!username) { try { username=(await bot.api.getMe()).username||''; } catch {} }
+    if(!username) {
+      const fallback=botKey==='secondary'?process.env.BOT_SECOND_USERNAME:process.env.BOT_USERNAME;
+      username=String(fallback||'').replace(/^@/,'');
+    }
     const link=username?'https://t.me/'+username+'?start=ref_'+userId:'';
     return ctx.reply('🎊 <b>GIỚI THIỆU REF</b>\n👥 Thành viên đã mời: <b>'+count.rows[0].total+'</b>\n💰 Hoa hồng đã nhận: <b>'+money(reward.rows[0].total)+'</b>\n📊 Tỷ lệ: <b>'+Number(settings.referral_commission_percent||0)+'%</b>\n'+(link?'<code>'+escapeHtml(link)+'</code>':'Chưa xác định username bot.'),{
       parse_mode:'HTML',
