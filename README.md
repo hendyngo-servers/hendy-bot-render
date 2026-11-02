@@ -112,3 +112,33 @@ GitHub Actions chạy hai lệnh này khi push hoặc mở pull request.
 ## Lưu ý bảo mật quan trọng
 
 Repository trước đây từng có file mẫu chứa chuỗi trông giống thông tin xác thực thật. Hãy thu hồi token Telegram cũ, tạo token mới qua BotFather, đổi mật khẩu/credential PostgreSQL và cập nhật các secret trên Render. Việc sửa file ở commit mới không xóa bí mật khỏi lịch sử Git; cần xử lý lịch sử repository riêng nếu bí mật đã từng được commit.
+
+
+## Mini App khách hàng và Bảng điều khiển Admin
+
+Mở bot bằng `/start`. Các nút Mini Game Live, App/Tool, Mua Code, Ví điện tử, OTP & Proxy, VIP, Trung tâm khách hàng, CSKH, Giftcode và Giới thiệu REF sẽ mở đúng trang trong Telegram Mini App.
+
+Mini App chỉ chấp nhận Telegram Web App `initData` đã được xác thực bằng HMAC với Bot Token; không tin `initDataUnsafe` hoặc Telegram ID do trình duyệt tự gửi. Phiên mặc định hết hạn sau 24 giờ. Admin được xác định ở backend bằng cách so Telegram ID đã ký với `ADMIN_ID`; ẩn nút trên giao diện chỉ là tiện ích hiển thị, không phải cơ chế phân quyền.
+
+### Nghiệp vụ đã có
+
+- Danh mục/sản phẩm: Mini Game, App/Tool, Code, OTP, Proxy và VIP. Admin tạo, cập nhật và tạm ngừng sản phẩm.
+- Ví điện tử: thông tin QR VietQR lấy từ cấu hình; nạp tiền được cộng khi webhook ngân hàng hợp lệ gửi đúng mẫu nội dung `NAP <TELEGRAM_USER_ID>`.
+- Đơn hàng: trừ số dư và ghi sổ ví trong transaction PostgreSQL; khách theo dõi được trạng thái và nội dung bàn giao sau khi hoàn tất.
+- Giftcode: admin phát hành mã, giới hạn lượt và ngày hết hạn; mỗi người chỉ được dùng một lần.
+- CSKH: người dùng tạo ticket, Admin phản hồi và bot gửi thông báo Telegram.
+- REF: ghi nhận người được mời. Hoa hồng mặc định 0%; Admin có thể bật tỷ lệ trong cấu hình trước khi áp dụng.
+- VIP: hiển thị cấp VIP, mốc nạp và các gói VIP do Admin tạo.
+- Admin: tổng quan, sản phẩm, đơn hàng, ticket hỗ trợ, tra cứu thành viên/điều chỉnh ví, giftcode và cấu hình nghiệp vụ.
+
+### Cấu hình bổ sung
+
+- `BOT_USERNAME`: username bot không có ký tự @, để tạo link referral.
+- Các cấu hình VietQR, nhóm/kênh có thể quản lý từ tab Cấu hình trong Dashboard.
+- Secret như `BOT_TOKEN`, `DATABASE_URL`, `TELEGRAM_WEBHOOK_SECRET` và `BANK_WEBHOOK_SECRET` chỉ quản lý trong Render Environment; không ghi vào bảng cấu hình của dashboard.
+
+### Hạn chế tích hợp bên ngoài
+
+Các sản phẩm OTP/Proxy, công cụ cho thuê và Mini Game được vận hành theo mô hình danh mục + đơn hàng + bàn giao thủ công trong bản này. Muốn tự động giao mã, kích hoạt tool, cấp OTP/proxy hoặc chạy game real-time cần thông tin API/nhà cung cấp, quy tắc giá và quy trình hoàn tiền tương ứng. Không giả lập dữ liệu nhà cung cấp hoặc trạng thái giao hàng khi chưa có tích hợp thật.
+
+Telegram Bot API không cho bot đặt màu nền tùy ý cho inline keyboard và cũng không cho di chuyển nút Menu hệ thống của Telegram sang bên phải. Màu nút được thiết kế trong Mini App; menu điều hướng tùy chỉnh và nút thao tác trong Dashboard nằm bên phải thanh tiêu đề.
