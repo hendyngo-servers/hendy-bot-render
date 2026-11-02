@@ -184,6 +184,29 @@ async function initDb() {
       details JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS matchmaking_matches (
+      id BIGSERIAL PRIMARY KEY,
+      player_one TEXT NOT NULL,
+      player_two TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'quick',
+      status TEXT NOT NULL DEFAULT 'matched',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at TIMESTAMPTZ
+    );
+    CREATE TABLE IF NOT EXISTS matchmaking_queue (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'quick',
+      status TEXT NOT NULL DEFAULT 'waiting',
+      matched_user_id TEXT,
+      match_id BIGINT REFERENCES matchmaking_matches(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_matchmaking_one_waiting
+      ON matchmaking_queue(user_id) WHERE status = 'waiting';
+    CREATE INDEX IF NOT EXISTS idx_matchmaking_mode_waiting
+      ON matchmaking_queue(mode, status, created_at);
     CREATE INDEX IF NOT EXISTS idx_products_category_active ON products(category, is_active);
     CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders(status, created_at DESC);

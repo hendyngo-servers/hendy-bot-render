@@ -284,6 +284,155 @@ router.post('/api/support/tickets', asyncRoute(async (req, res) => {
   res.status(201).json({ ticket: result.rows[0], message: 'Đã gửi yêu cầu hỗ trợ.' });
 }));
 
+router.get('/api/matchmaking', asyncRoute(async (req, res) => {
+  const userId = String(req.telegramUser.id);
+  const active = await pool.query(
+    "SELECT m.id, m.mode, m.status, m.created_at, " +
+    "CASE WHEN m.player_one=$1 THEN m.player_two ELSE m.player_one END AS opponent_id " +
+    "FROM matchmaking_matches m WHERE m.status='matched' AND (m.player_one=$1 OR m.player_two=$1) " +
+    "ORDER BY m.created_at DESC LIMIT 1",
+    [userId]
+  );
+  if (active.rowCount) {
+    const opponent = await pool.query('SELECT name, username FROM users WHERE user_id=$1', [active.rows[0].opponent_id]);
+    return res.json({
+      status:'matched',
+      matchId:String(active.rows[0].id),
+      mode:active.rows[0].mode,
+      opponentId:active.rows[0].opponent_id,
+      opponentName:(opponent.rows[0] && (opponent.rows[0].name || opponent.rows[0].username)) || 'Thành viên Hendy',
+      createdAt:active.rows[0].created_at
+    });
+  }
+  const waiting = await pool.query(
+    "SELECT id, mode, created_at FROM matchmaking_queue WHERE user_id=$1 AND status='waiting' ORDER BY created_at DESC LIMIT 1",
+    [userId]
+  );
+  if (waiting.rowCount) {
+    return res.json({ status:'waiting', mode:waiting.rows[0].mode, createdAt:waiting.rows[0].created_at });
+  }
+  res.json({ status:'idle' });
+}));
+
+router.post('/api/matchmaking/join', asyncRoute(async (req, res) => {
+  const userId = String(req.telegramUser.id);
+  const mode = cleanText(req.body && req.body.mode || 'quick', 24);
+  if (!['quick','practice'].includes(mode)) throw httpError(400, 'Chế độ ghép đôi không hợp lệ.');
+  const client = await pool.connect();
+  let match = null;
+  let waiting = false;
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['hendy-matchmaking:' + mode]);
+
+    const currentMatch = await client.query(
+      "SELECT * FROM matchmaking_matches WHERE status='matched' AND (player_one=$1 OR player_two=$1) ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+      [userId]
+    );
+    if (currentMatch.rowCount) {
+      match = currentMatch.rows[0];
+    } else {
+      const currentQueue = await client.query(
+        "SELECT id FROM matchmaking_queue WHERE user_id=$1 AND status='waiting' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+        [userId]
+      );
+      if (currentQueue.rowCount) {
+        waiting = true;
+      } else {
+        const partner = await client.query(
+          "SELECT id,user_id FROM matchmaking_queue WHERE status='waiting' AND mode=$1 AND user_id<>$2 ORDER BY created_at ASC LIMIT 1 FOR UPDATE",
+          [mode,userId]
+        );
+        if (partner.rowCount) {
+          const created = await client.query(
+            "INSERT INTO matchmaking_matches (player_one,player_two,mode,status) VALUES ($1,$2,$3,'matched') RETURNING *",
+            [partner.rows[0].user_id,userId,mode]
+          );
+          match = created.rows[0];
+          await client.query(
+            "UPDATE matchmaking_queue SET status='paired',matched_user_id=$1,match_id=$2,updated_at=NOW() WHERE id=$3",
+            [userId,match.id,partner.rows[0].id]
+          );
+          await client.query(
+            "INSERT INTO matchmaking_queue (user_id,mode,status,matched_user_id,match_id) VALUES ($1,$2,'paired',$3,$4)",
+            [userId,mode,partner.rows[0].user_id,match.id]
+          );
+        } else {
+          await client.query(
+            "INSERT INTO matchmaking_queue (user_id,mode,status) VALUES ($1,$2,'waiting')",
+            [userId,mode]
+          );
+          waiting = true;
+        }
+      }
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  if (match) {
+    const opponentId = match.player_one === userId ? match.player_two : match.player_one;
+    const opponent = await getUser(opponentId);
+    const opponentName = opponent && (opponent.name || opponent.username) || 'Thành viên Hendy';
+    if (req.app.locals.bot) {
+      const message = '🎮 Bạn đã được ghép đôi! Đối thủ: ' + opponentName + ' · Mã ghép: #' + match.id;
+      for (const id of [userId,opponentId]) {
+        try { await req.app.locals.bot.telegram.sendMessage(id,message); }
+        catch (error) { console.warn('Không gửi được tin nhắn ghép đôi:',error.message); }
+      }
+    }
+    return res.json({ status:'matched', matchId:String(match.id), opponentId, opponentName });
+  }
+  res.json({ status:waiting ? 'waiting' : 'idle', message:waiting ? 'Đang chờ người chơi phù hợp.' : 'Chưa có trạng thái ghép đôi.' });
+}));
+
+router.post('/api/matchmaking/leave', asyncRoute(async (req, res) => {
+  const userId = String(req.telegramUser.id);
+  const result = await pool.query(
+    "UPDATE matchmaking_queue SET status='cancelled',updated_at=NOW() WHERE user_id=$1 AND status='waiting' RETURNING id",
+    [userId]
+  );
+  if (!result.rowCount) {
+    const active = await pool.query(
+      "SELECT id FROM matchmaking_matches WHERE status='matched' AND (player_one=$1 OR player_two=$1) LIMIT 1",
+      [userId]
+    );
+    if (active.rowCount) throw httpError(409, 'Bạn đã được ghép đôi. Hãy kết thúc lượt ghép trước khi rời hàng chờ.');
+  }
+  res.json({ success:true, status:'idle' });
+}));
+
+router.post('/api/matchmaking/finish', asyncRoute(async (req, res) => {
+  const matchId = String(req.body && req.body.matchId || '');
+  if (!/^\d{1,18}$/.test(matchId)) throw httpError(400, 'Mã ghép đôi không hợp lệ.');
+  const userId = String(req.telegramUser.id);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      "UPDATE matchmaking_matches SET status='completed',finished_at=NOW() " +
+      "WHERE id=$1 AND status='matched' AND (player_one=$2 OR player_two=$2) RETURNING id",
+      [matchId,userId]
+    );
+    if (!result.rowCount) throw httpError(404, 'Không tìm thấy lượt ghép đang hoạt động.');
+    await client.query(
+      "UPDATE matchmaking_queue SET status='completed',updated_at=NOW() WHERE match_id=$1",
+      [matchId]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  res.json({ success:true,status:'completed' });
+}));
+
 router.get('/api/vip', asyncRoute(async (req, res) => {
   const user = await userRow(req.telegramUser);
   const products = await listProducts('vip', false);
@@ -578,6 +727,18 @@ router.patch('/api/admin/settings', asyncRoute(async (req, res) => {
   }
   await audit(req.telegramUser.id, 'settings.update', 'public-settings', { keys });
   res.json({ success: true, settings: await querySettings(settingKeys, false) });
+}));
+
+router.patch('/api/admin/giftcodes/:code', asyncRoute(async (req, res) => {
+  const code = cleanText(req.params.code, 64).toUpperCase();
+  const isActive = Boolean(req.body && req.body.isActive);
+  const result = await pool.query(
+    'UPDATE giftcodes SET is_active=$1 WHERE code=$2 RETURNING code,is_active',
+    [isActive,code]
+  );
+  if (!result.rowCount) throw httpError(404, 'Không tìm thấy giftcode.');
+  await audit(req.telegramUser.id, 'giftcode.toggle', code, { isActive });
+  res.json({ giftcode:result.rows[0] });
 }));
 
 router.get('/api/admin/giftcodes', asyncRoute(async (req, res) => {

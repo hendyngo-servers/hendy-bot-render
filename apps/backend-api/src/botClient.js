@@ -50,8 +50,9 @@ async function getHomeKeyboard(userId) {
     [appButton('🎮 MINI GAME LIVE', 'minigame'), appButton('🗂 APP / TOOL', 'tools')],
     [appButton('🛍 MUA CODE', 'codes'), appButton('👛 VÍ ĐIỆN TỬ', 'wallet')],
     [appButton('🛡 OTP & PROXY', 'otp'), appButton('👑 VIP', 'vip')],
-    [appButton('💎 TRUNG TÂM KHÁCH HÀNG', 'customer'), appButton('🎧 CSKH', 'support')],
-    [appButton('🎁 GIFTCODE', 'giftcode'), appButton('👥 GIỚI THIỆU REF', 'referrals')]
+    [appButton('🤝 GHÉP ĐÔI', 'matchmaking'), appButton('💎 TRUNG TÂM KHÁCH HÀNG', 'customer')],
+    [appButton('🎧 CSKH', 'support'), appButton('🎁 GIFTCODE', 'giftcode')],
+    [appButton('👥 GIỚI THIỆU REF', 'referrals')]
   ];
 
   const group = usableHttpsUrl(groupUrl);
